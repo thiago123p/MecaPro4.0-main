@@ -43,10 +43,10 @@ export const usuarioDAO = {
     await apiRequest(`/usuarios/${id}`, { method: 'DELETE' });
   },
 
-  async login(cpf_usu: string, senha_usu: string): Promise<Usuario> {
+  async login(login: string, senha_usu: string): Promise<Usuario> {
     return apiRequest<Usuario>('/usuarios/login', {
       method: 'POST',
-      body: JSON.stringify({ cpf_usu, senha_usu }),
+      body: JSON.stringify({ login, senha_usu }),
     });
   },
 };

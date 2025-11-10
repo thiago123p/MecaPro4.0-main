@@ -3,17 +3,21 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { usuarioService } from "@/controllers/usuarioService";
 import { orcamentoService } from "@/controllers/orcamentoService";
 import { osService } from "@/controllers/osService";
+import { historicoRelatorioService, HistoricoRelatorio } from "@/controllers/historicoRelatorioService";
 import { Usuario } from "@/models/types";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 export default function Relatorio() {
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [showPdfDialog, setShowPdfDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [selectedUsuario, setSelectedUsuario] = useState("");
@@ -24,9 +28,13 @@ export default function Relatorio() {
     ordens: [],
     usuario: null
   });
+  
+  const [historico, setHistorico] = useState<HistoricoRelatorio[]>([]);
+  const [historicoToDelete, setHistoricoToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     loadUsuarios();
+    loadHistorico();
     setMaxDates();
   }, []);
 
@@ -44,6 +52,16 @@ export default function Relatorio() {
       setUsuarios(data);
     } catch (error) {
       toast.error("Erro ao carregar usuários");
+    }
+  };
+
+  const loadHistorico = async () => {
+    try {
+      const data = await historicoRelatorioService.getAll();
+      setHistorico(data);
+    } catch (error) {
+      console.warn("Histórico não disponível:", error);
+      setHistorico([]); // Define array vazio se der erro
     }
   };
 
@@ -83,9 +101,35 @@ export default function Relatorio() {
         usuario: usuario
       });
 
+      // Calcular totais
+      const valorTotalOrcamentos = orcamentosFiltrados.reduce((total: number, orc: any) => total + Number(orc.valor_total || 0), 0);
+      const valorTotalOS = osFiltradas.reduce((total: number, os: any) => total + Number(os.valor_total || 0), 0);
+      const valorTotalGeral = valorTotalOrcamentos + valorTotalOS;
+
+      // Salvar no histórico (se disponível)
+      try {
+        await historicoRelatorioService.create({
+          id_usuario_consultado: selectedUsuario,
+          id_usuario_gerador: localStorage.getItem('userId') || 'admin',
+          data_inicio: dataInicio,
+          data_fim: dataFim,
+          total_orcamentos: orcamentosFiltrados.length,
+          valor_total_orcamentos: valorTotalOrcamentos,
+          total_os: osFiltradas.length,
+          valor_total_os: valorTotalOS,
+          valor_total_geral: valorTotalGeral
+        });
+        // Recarregar histórico
+        loadHistorico();
+      } catch (histError) {
+        console.warn("Não foi possível salvar no histórico:", histError);
+        // Continua mesmo se falhar ao salvar histórico
+      }
+
       setShowReportDialog(false);
       setShowSearchDialog(false);
       setShowPdfDialog(true);
+      toast.success("Relatório gerado com sucesso!");
     } catch (error) {
       toast.error("Erro ao gerar relatório");
     }
@@ -103,6 +147,38 @@ export default function Relatorio() {
     return reportData.ordens.reduce((total: number, os: any) => total + Number(os.valor_total || 0), 0);
   };
 
+  const handleDeleteHistorico = (id: string) => {
+    setHistoricoToDelete(id);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDeleteHistorico = async () => {
+    if (!historicoToDelete) return;
+    
+    try {
+      await historicoRelatorioService.delete(historicoToDelete);
+      loadHistorico();
+      toast.success("Histórico excluído com sucesso!");
+    } catch (error) {
+      toast.error("Erro ao excluir histórico");
+    } finally {
+      setShowDeleteDialog(false);
+      setHistoricoToDelete(null);
+    }
+  };
+
+  const formatarData = (data: string) => {
+    return new Date(data).toLocaleDateString('pt-BR');
+  };
+
+  const formatarDataHora = (data: string) => {
+    return new Date(data).toLocaleString('pt-BR');
+  };
+
+  const formatarValor = (valor: number) => {
+    return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
@@ -113,6 +189,61 @@ export default function Relatorio() {
               <Search className="w-4 h-4 mr-2" />
               Gerar Relatório
             </Button>
+          </div>
+
+          <div className="bg-card rounded-lg border p-8 mb-8">
+            <h2 className="text-xl font-bold mb-6">Histórico de Relatórios Gerados</h2>
+            
+            {historico.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                <p>Nenhum relatório foi gerado ainda</p>
+              </div>
+            ) : (
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data/Hora Geração</TableHead>
+                      <TableHead>Usuário Consultado</TableHead>
+                      <TableHead>Período</TableHead>
+                      <TableHead>Orçamentos</TableHead>
+                      <TableHead>OS</TableHead>
+                      <TableHead>Valor Total</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {historico.map((item) => (
+                      <TableRow key={item.id_historico}>
+                        <TableCell>{formatarDataHora(item.data_geracao)}</TableCell>
+                        <TableCell>{item.nome_usuario_consultado || '-'}</TableCell>
+                        <TableCell>
+                          {formatarData(item.data_inicio)} até {formatarData(item.data_fim)}
+                        </TableCell>
+                        <TableCell>
+                          {item.total_orcamentos} ({formatarValor(item.valor_total_orcamentos)})
+                        </TableCell>
+                        <TableCell>
+                          {item.total_os} ({formatarValor(item.valor_total_os)})
+                        </TableCell>
+                        <TableCell className="font-bold">
+                          {formatarValor(item.valor_total_geral)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteHistorico(item.id_historico)}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
 
           <div className="bg-card rounded-lg border p-8">
@@ -303,6 +434,21 @@ export default function Relatorio() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que deseja excluir este registro do histórico? Esta ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmDeleteHistorico}>Excluir</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
     </div>

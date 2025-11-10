@@ -55,6 +55,10 @@ export default function ServicosPage() {
       toast.error("Descrição do serviço é obrigatória");
       return false;
     }
+    if (!formData.cos.trim()) {
+      toast.error("COS é obrigatório");
+      return false;
+    }
     if (formData.valor_serv <= 0) {
       toast.error("Valor do serviço deve ser maior que zero");
       return false;
@@ -252,7 +256,7 @@ export default function ServicosPage() {
               <Input
                 value={formData.descricao_serv}
                 onChange={(e) => setFormData({ ...formData, descricao_serv: e.target.value })}
-                placeholder="Digite a descrição do serviço"
+                placeholder="Ex: Troca de óleo, Alinhamento, Balanceamento"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -264,7 +268,7 @@ export default function ServicosPage() {
                   min="0"
                   value={formData.valor_serv}
                   onChange={(e) => setFormData({ ...formData, valor_serv: parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
+                  placeholder="Ex: 120.00"
                 />
               </div>
               <div>
@@ -283,11 +287,11 @@ export default function ServicosPage() {
               </div>
             </div>
             <div>
-              <Label>COS (Centro de Serviço)</Label>
+              <Label>COS (Centro de Serviço) *</Label>
               <Input
                 value={formData.cos}
                 onChange={(e) => setFormData({ ...formData, cos: e.target.value })}
-                placeholder="Digite o código do centro de serviço"
+                placeholder="Ex: CS-001, MECÂNICA-01"
                 maxLength={50}
               />
             </div>

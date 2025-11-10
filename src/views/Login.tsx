@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Settings } from "lucide-react";
+import { Settings, Eye, EyeOff } from "lucide-react";
 import { usuarioService } from "@/controllers/usuarioService";
 
 export default function Login() {
@@ -20,6 +20,7 @@ export default function Login() {
   const [loginRecuperacao, setLoginRecuperacao] = useState("");
   const [showRecuperacao, setShowRecuperacao] = useState(false);
   const [palavraChave, setPalavraChave] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async () => {
@@ -39,30 +40,18 @@ export default function Login() {
         return;
       }
 
-      // Login normal: buscar usuário pelo nome
-      const usuarios = await usuarioService.search(login);
+      // Login normal via API (backend valida senha com bcrypt)
+      const usuario = await usuarioService.login(login, senha);
       
-      if (usuarios.length === 0) {
-        toast.error("Usuário não encontrado");
-        return;
-      }
-
-      const usuario = usuarios[0];
-      
-      // Verificar se a senha está correta (comparação direta, pois está no banco)
-      if (usuario.senha_usu !== senha) {
-        toast.error("Senha incorreta");
-        return;
-      }
-
       localStorage.setItem("userType", usuario.tipo_usu);
       localStorage.setItem("userId", usuario.id_usu);
       localStorage.setItem("userName", usuario.nome_usu);
-      toast.success("Login realizado com sucesso!");
+      toast.success(`Bem-vindo, ${usuario.nome_usu}!`);
       navigate("/dashboard");
       
     } catch (error: any) {
-      toast.error("Erro ao fazer login: " + error.message);
+      console.error('Erro no login:', error);
+      toast.error(error.message || "CPF ou senha incorretos");
     }
   };
 
@@ -109,7 +98,7 @@ export default function Login() {
         <div className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="login" className="text-foreground">
-              Login
+              Nome ou CPF
             </Label>
             <Input
               id="login"
@@ -117,7 +106,7 @@ export default function Login() {
               value={login}
               onChange={(e) => setLogin(e.target.value)}
               className="bg-background"
-              placeholder="Nome de usuário"
+              placeholder="Digite seu nome ou CPF"
             />
           </div>
 
@@ -125,15 +114,26 @@ export default function Login() {
             <Label htmlFor="senha" className="text-foreground">
               Senha
             </Label>
-            <Input
-              id="senha"
-              type="password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              className="bg-background"
-              placeholder="••••••••"
-              onKeyPress={(e) => e.key === "Enter" && handleLogin()}
-            />
+            <div className="relative">
+              <Input
+                id="senha"
+                type={showPassword ? "text" : "password"}
+                value={senha}
+                onChange={(e) => setSenha(e.target.value)}
+                className="bg-background pr-10"
+                placeholder="••••••••"
+                onKeyPress={(e) => e.key === "Enter" && handleLogin()}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
           </div>
 
           <div className="flex gap-4">
@@ -160,17 +160,17 @@ export default function Login() {
           <DialogHeader>
             <DialogTitle>Recuperar Senha</DialogTitle>
             <DialogDescription>
-              Digite seu login para ver a palavra-chave de recuperação
+              Digite seu nome ou CPF para ver a palavra-chave de recuperação
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="loginRecuperacao">Login</Label>
+              <Label htmlFor="loginRecuperacao">Nome ou CPF</Label>
               <Input
                 id="loginRecuperacao"
                 value={loginRecuperacao}
                 onChange={(e) => setLoginRecuperacao(e.target.value)}
-                placeholder="Digite seu login"
+                placeholder="Digite seu nome ou CPF"
               />
             </div>
             {palavraChave && (

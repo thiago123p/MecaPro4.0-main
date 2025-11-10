@@ -30,4 +30,8 @@ export const usuarioService = {
   async delete(id: string): Promise<void> {
     return usuarioDAO.deletar(id);
   },
+
+  async login(login: string, senha_usu: string): Promise<Usuario> {
+    return usuarioDAO.login(login, senha_usu);
+  },
 };

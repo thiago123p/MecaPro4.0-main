@@ -9,6 +9,7 @@ import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { mecanicoService } from "@/controllers/mecanicoService";
 import { Mecanico } from "@/models/types";
 import { toast } from "sonner";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 export default function MecanicoPage() {
   const [mecanicos, setMecanicos] = useState<Mecanico[]>([]);
@@ -41,6 +42,42 @@ export default function MecanicoPage() {
 
   const handleSave = async () => {
     try {
+      // Validação: Todos os campos obrigatórios
+      if (!formData.nome_mec?.trim()) {
+        toast.error("Nome é obrigatório");
+        return;
+      }
+      if (!formData.cpf_mec?.trim()) {
+        toast.error("CPF é obrigatório");
+        return;
+      }
+      if (!formData.endereco_mec?.trim()) {
+        toast.error("Endereço é obrigatório");
+        return;
+      }
+      if (!formData.cidade_mec?.trim()) {
+        toast.error("Cidade é obrigatória");
+        return;
+      }
+      if (!formData.telefone_mec?.trim()) {
+        toast.error("Telefone é obrigatório");
+        return;
+      }
+
+      // Validação: CPF com 11 dígitos
+      const cpfNumeros = formData.cpf_mec.replace(/\D/g, '');
+      if (cpfNumeros.length !== 11) {
+        toast.error("CPF deve ter 11 dígitos");
+        return;
+      }
+
+      // Validação: Telefone com DDD (mínimo 10 dígitos para nacional ou com +código para internacional)
+      const telefoneNumeros = formData.telefone_mec.replace(/\D/g, '');
+      if (telefoneNumeros.length < 10) {
+        toast.error("Telefone deve ter pelo menos 10 dígitos (com código do país e DDD)");
+        return;
+      }
+
       if (editingMecanico) {
         await mecanicoService.update(editingMecanico.id_mec, formData);
         toast.success("Mecânico atualizado!");
@@ -191,36 +228,41 @@ export default function MecanicoPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Nome</Label>
+              <Label>Nome *</Label>
               <Input
+                placeholder="Ex: Carlos Silva"
                 value={formData.nome_mec}
                 onChange={(e) => setFormData({ ...formData, nome_mec: e.target.value })}
               />
             </div>
             <div>
-              <Label>CPF</Label>
+              <Label>CPF *</Label>
               <Input
+                placeholder="Ex: 123.456.789-00 (11 dígitos)"
                 value={formData.cpf_mec}
                 onChange={(e) => setFormData({ ...formData, cpf_mec: e.target.value })}
               />
             </div>
             <div>
-              <Label>Telefone</Label>
-              <Input
+              <Label>Telefone *</Label>
+              <PhoneInput
                 value={formData.telefone_mec}
-                onChange={(e) => setFormData({ ...formData, telefone_mec: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, telefone_mec: value })}
+                placeholder="(64) 99999-1234"
               />
             </div>
             <div>
-              <Label>Endereço</Label>
+              <Label>Endereço *</Label>
               <Input
+                placeholder="Ex: Rua das Flores, 123"
                 value={formData.endereco_mec}
                 onChange={(e) => setFormData({ ...formData, endereco_mec: e.target.value })}
               />
             </div>
             <div>
-              <Label>Cidade</Label>
+              <Label>Cidade *</Label>
               <Input
+                placeholder="Ex: Jataí"
                 value={formData.cidade_mec}
                 onChange={(e) => setFormData({ ...formData, cidade_mec: e.target.value })}
               />

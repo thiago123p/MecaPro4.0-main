@@ -6,10 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Eye, EyeOff } from "lucide-react";
 import { usuarioService } from "@/controllers/usuarioService";
 import { Usuario } from "@/models/types";
 import { toast } from "sonner";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 export default function UsuarioPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -18,6 +19,7 @@ export default function UsuarioPage() {
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null);
   const [deletingId, setDeletingId] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   
   const [formData, setFormData] = useState({
     nome_usu: "",
@@ -44,22 +46,92 @@ export default function UsuarioPage() {
   };
 
   const validateForm = () => {
+    // Validação: Nome obrigatório
     if (!formData.nome_usu.trim()) {
       toast.error("Nome é obrigatório");
       return false;
     }
+
+    // Validação: CPF obrigatório e com 11 dígitos
     if (!formData.cpf_usu.trim()) {
       toast.error("CPF é obrigatório");
       return false;
     }
+    const cpfNumeros = formData.cpf_usu.replace(/\D/g, '');
+    if (cpfNumeros.length !== 11) {
+      toast.error("CPF deve ter 11 dígitos");
+      return false;
+    }
+
+    // Validação: Endereço obrigatório
+    if (!formData.endereco_usu.trim()) {
+      toast.error("Endereço é obrigatório");
+      return false;
+    }
+
+    // Validação: Cidade obrigatória
+    if (!formData.cidade_usu.trim()) {
+      toast.error("Cidade é obrigatória");
+      return false;
+    }
+
+    // Validação: Telefone obrigatório e com formato válido
+    if (!formData.telefone_usu.trim()) {
+      toast.error("Telefone é obrigatório");
+      return false;
+    }
+    const telefoneNumeros = formData.telefone_usu.replace(/\D/g, '');
+    if (telefoneNumeros.length < 10) {
+      toast.error("Telefone deve ter pelo menos 10 dígitos (com código do país e DDD)");
+      return false;
+    }
+
+    // Validação: Senha obrigatória para novo usuário
     if (!editingUsuario && !formData.senha_usu) {
       toast.error("Senha é obrigatória para novo usuário");
       return false;
     }
+
+    // Validação: Tipo de usuário obrigatório
     if (!formData.tipo_usu) {
       toast.error("Tipo de usuário é obrigatório");
       return false;
     }
+
+    // Validação: Palavra-chave obrigatória
+    if (!formData.palavra_chave_usu.trim()) {
+      toast.error("Palavra-chave é obrigatória");
+      return false;
+    }
+
+    // Validação: Palavra-chave com no máximo 3 palavras
+    const palavras = formData.palavra_chave_usu.trim().split(/\s+/);
+    if (palavras.length > 3) {
+      toast.error("Palavra-chave deve ter no máximo 3 palavras");
+      return false;
+    }
+
+    // Validação: Palavra-chave não pode conter a senha
+    if (formData.senha_usu && formData.senha_usu.length >= 3) {
+      const senhaLower = formData.senha_usu.toLowerCase();
+      const palavraChaveLower = formData.palavra_chave_usu.toLowerCase();
+      
+      // Verifica se a senha inteira está na palavra-chave
+      if (palavraChaveLower.includes(senhaLower)) {
+        toast.error("Palavra-chave não pode conter a senha");
+        return false;
+      }
+      
+      // Verifica se partes da senha (com 3+ caracteres) estão na palavra-chave
+      for (let i = 0; i <= senhaLower.length - 3; i++) {
+        const substring = senhaLower.substring(i, i + 3);
+        if (palavraChaveLower.includes(substring)) {
+          toast.error("Palavra-chave não pode conter partes da senha");
+          return false;
+        }
+      }
+    }
+
     return true;
   };
 
@@ -237,50 +309,67 @@ export default function UsuarioPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Nome</Label>
+              <Label>Nome *</Label>
               <Input
+                placeholder="Ex: João da Silva"
                 value={formData.nome_usu}
                 onChange={(e) => setFormData({ ...formData, nome_usu: e.target.value })}
               />
             </div>
             <div>
-              <Label>CPF</Label>
+              <Label>CPF *</Label>
               <Input
+                placeholder="Ex: 123.456.789-00 (11 dígitos)"
                 value={formData.cpf_usu}
                 onChange={(e) => setFormData({ ...formData, cpf_usu: e.target.value })}
               />
             </div>
             <div>
-              <Label>Telefone</Label>
-              <Input
+              <Label>Telefone *</Label>
+              <PhoneInput
                 value={formData.telefone_usu}
-                onChange={(e) => setFormData({ ...formData, telefone_usu: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, telefone_usu: value })}
+                placeholder="(64) 99999-1234"
               />
             </div>
             <div>
-              <Label>Endereço</Label>
+              <Label>Endereço *</Label>
               <Input
+                placeholder="Ex: Rua das Flores, 123"
                 value={formData.endereco_usu}
                 onChange={(e) => setFormData({ ...formData, endereco_usu: e.target.value })}
               />
             </div>
             <div>
-              <Label>Cidade</Label>
+              <Label>Cidade *</Label>
               <Input
+                placeholder="Ex: Jataí"
                 value={formData.cidade_usu}
                 onChange={(e) => setFormData({ ...formData, cidade_usu: e.target.value })}
               />
             </div>
             <div>
-              <Label>Senha</Label>
-              <Input
-                type="password"
-                value={formData.senha_usu}
-                onChange={(e) => setFormData({ ...formData, senha_usu: e.target.value })}
-              />
+              <Label>Senha *</Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={formData.senha_usu}
+                  onChange={(e) => setFormData({ ...formData, senha_usu: e.target.value })}
+                  placeholder={editingUsuario ? "Deixe em branco para não alterar" : "Digite a senha (mínimo 3 caracteres)"}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
             <div>
-              <Label>Tipo de Usuário</Label>
+              <Label>Tipo de Usuário *</Label>
               <Select
                 value={formData.tipo_usu}
                 onValueChange={(value) => setFormData({ ...formData, tipo_usu: value })}
@@ -295,11 +384,11 @@ export default function UsuarioPage() {
               </Select>
             </div>
             <div>
-              <Label>Palavra-chave (Recuperação de senha)</Label>
+              <Label>Palavra-chave * (máximo 3 palavras, não pode conter a senha)</Label>
               <Input
                 value={formData.palavra_chave_usu}
                 onChange={(e) => setFormData({ ...formData, palavra_chave_usu: e.target.value })}
-                placeholder="Dica para lembrar da senha"
+                placeholder="Ex: carro azul favorito"
               />
             </div>
             <div className="flex gap-2">

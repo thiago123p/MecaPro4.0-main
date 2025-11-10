@@ -52,6 +52,35 @@ export default function VeiculoPage() {
 
   const handleSave = async () => {
     try {
+      // Validação: Todos os campos obrigatórios
+      if (!formData.descricao_veic?.trim()) {
+        toast.error("Descrição do veículo é obrigatória");
+        return;
+      }
+      if (!formData.placa_veic?.trim()) {
+        toast.error("Placa do veículo é obrigatória");
+        return;
+      }
+      if (!formData.ano_veic || formData.ano_veic <= 0) {
+        toast.error("Ano do veículo é obrigatório e deve ser válido");
+        return;
+      }
+      if (!formData.id_marca) {
+        toast.error("Marca do veículo é obrigatória");
+        return;
+      }
+      if (!formData.id_cli) {
+        toast.error("Cliente do veículo é obrigatório");
+        return;
+      }
+
+      // Validação: Placa com formato básico (7 caracteres alfanuméricos)
+      const placaLimpa = formData.placa_veic.replace(/[^A-Za-z0-9]/g, '');
+      if (placaLimpa.length !== 7) {
+        toast.error("Placa deve ter 7 caracteres (AAA-1234 ou AAA1A23)");
+        return;
+      }
+
       if (editingVeiculo) {
         await veiculoService.update(editingVeiculo.id_veic, formData);
         toast.success("Veículo atualizado!");
@@ -204,29 +233,32 @@ export default function VeiculoPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Descrição</Label>
+              <Label>Descrição *</Label>
               <Input
+                placeholder="Ex: Fiat Uno Mille 1.0"
                 value={formData.descricao_veic}
                 onChange={(e) => setFormData({ ...formData, descricao_veic: e.target.value })}
               />
             </div>
             <div>
-              <Label>Placa</Label>
+              <Label>Placa *</Label>
               <Input
+                placeholder="Ex: ABC-1234 ou ABC1D23 (7 caracteres)"
                 value={formData.placa_veic}
                 onChange={(e) => setFormData({ ...formData, placa_veic: e.target.value })}
               />
             </div>
             <div>
-              <Label>Ano</Label>
+              <Label>Ano *</Label>
               <Input
                 type="number"
+                placeholder="Ex: 2020"
                 value={formData.ano_veic}
                 onChange={(e) => setFormData({ ...formData, ano_veic: parseInt(e.target.value) })}
               />
             </div>
             <div>
-              <Label>Marca</Label>
+              <Label>Marca *</Label>
               <Select
                 value={formData.id_marca}
                 onValueChange={(value) => setFormData({ ...formData, id_marca: value })}
@@ -244,7 +276,7 @@ export default function VeiculoPage() {
               </Select>
             </div>
             <div>
-              <Label>Cliente</Label>
+              <Label>Cliente *</Label>
               <Select
                 value={formData.id_cli}
                 onValueChange={(value) => setFormData({ ...formData, id_cli: value })}

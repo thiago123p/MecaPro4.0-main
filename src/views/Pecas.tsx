@@ -328,30 +328,33 @@ export default function PecasPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Descrição</Label>
+              <Label>Descrição *</Label>
               <Input
+                placeholder="Ex: Filtro de óleo, Pastilha de freio"
                 value={formData.descricao_peca}
                 onChange={(e) => setFormData({ ...formData, descricao_peca: e.target.value })}
               />
             </div>
             <div>
-              <Label>Código</Label>
+              <Label>Código *</Label>
               <Input
+                placeholder="Ex: FO-123, PF-456"
                 value={formData.codigo_peca}
                 onChange={(e) => setFormData({ ...formData, codigo_peca: e.target.value })}
               />
             </div>
             <div>
-              <Label>Preço</Label>
+              <Label>Preço *</Label>
               <Input
                 type="number"
                 step="0.01"
+                placeholder="Ex: 45.90"
                 value={formData.preco_peca}
                 onChange={(e) => setFormData({ ...formData, preco_peca: parseFloat(e.target.value) })}
               />
             </div>
             <div>
-              <Label>Tipo</Label>
+              <Label>Tipo *</Label>
               <Select
                 value={formData.tipo_peca}
                 onValueChange={(value) => setFormData({ ...formData, tipo_peca: value })}
@@ -367,7 +370,7 @@ export default function PecasPage() {
               </Select>
             </div>
             <div>
-              <Label>Marca</Label>
+              <Label>Marca *</Label>
               <Select
                 value={formData.id_marca}
                 onValueChange={(value) => setFormData({ ...formData, id_marca: value })}

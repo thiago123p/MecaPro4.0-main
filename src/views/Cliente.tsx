@@ -9,6 +9,7 @@ import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { clienteService } from "@/controllers/clienteService";
 import { Cliente } from "@/models/types";
 import { toast } from "sonner";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 export default function ClientePage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -41,13 +42,39 @@ export default function ClientePage() {
 
   const handleSave = async () => {
     try {
-      // Validação dos campos obrigatórios
+      // Validação: Todos os campos obrigatórios
       if (!formData.nome_cli?.trim()) {
         toast.error("Nome é obrigatório");
         return;
       }
       if (!formData.cpf_cli?.trim()) {
         toast.error("CPF é obrigatório");
+        return;
+      }
+      if (!formData.endereco_cli?.trim()) {
+        toast.error("Endereço é obrigatório");
+        return;
+      }
+      if (!formData.cidade_cli?.trim()) {
+        toast.error("Cidade é obrigatória");
+        return;
+      }
+      if (!formData.telefone_cli?.trim()) {
+        toast.error("Telefone é obrigatório");
+        return;
+      }
+
+      // Validação: CPF com 11 dígitos
+      const cpfNumeros = formData.cpf_cli.replace(/\D/g, '');
+      if (cpfNumeros.length !== 11) {
+        toast.error("CPF deve ter 11 dígitos");
+        return;
+      }
+
+      // Validação: Telefone com DDD (mínimo 10 dígitos para nacional ou com +código para internacional)
+      const telefoneNumeros = formData.telefone_cli.replace(/\D/g, '');
+      if (telefoneNumeros.length < 10) {
+        toast.error("Telefone deve ter pelo menos 10 dígitos (com código do país e DDD)");
         return;
       }
 
@@ -203,36 +230,41 @@ export default function ClientePage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Nome</Label>
+              <Label>Nome *</Label>
               <Input
+                placeholder="Ex: João da Silva"
                 value={formData.nome_cli}
                 onChange={(e) => setFormData({ ...formData, nome_cli: e.target.value })}
               />
             </div>
             <div>
-              <Label>CPF</Label>
+              <Label>CPF *</Label>
               <Input
+                placeholder="Ex: 123.456.789-00 (11 dígitos)"
                 value={formData.cpf_cli}
                 onChange={(e) => setFormData({ ...formData, cpf_cli: e.target.value })}
               />
             </div>
             <div>
-              <Label>Telefone</Label>
-              <Input
+              <Label>Telefone *</Label>
+              <PhoneInput
                 value={formData.telefone_cli}
-                onChange={(e) => setFormData({ ...formData, telefone_cli: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, telefone_cli: value })}
+                placeholder="(64) 99999-1234"
               />
             </div>
             <div>
-              <Label>Endereço</Label>
+              <Label>Endereço *</Label>
               <Input
+                placeholder="Ex: Rua das Flores, 123"
                 value={formData.endereco_cli}
                 onChange={(e) => setFormData({ ...formData, endereco_cli: e.target.value })}
               />
             </div>
             <div>
-              <Label>Cidade</Label>
+              <Label>Cidade *</Label>
               <Input
+                placeholder="Ex: Jataí"
                 value={formData.cidade_cli}
                 onChange={(e) => setFormData({ ...formData, cidade_cli: e.target.value })}
               />

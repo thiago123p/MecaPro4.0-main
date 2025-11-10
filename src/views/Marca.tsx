@@ -34,6 +34,12 @@ export default function MarcaPage() {
 
   const handleSave = async () => {
     try {
+      // Validação: Nome da marca obrigatório
+      if (!nomeMarca.trim()) {
+        toast.error("Nome da marca é obrigatório");
+        return;
+      }
+
       if (editingMarca) {
         await marcaService.update(editingMarca.id_marca, { nome_marca: nomeMarca });
         toast.success("Marca atualizada!");
@@ -156,8 +162,9 @@ export default function MarcaPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Nome da Marca</Label>
+              <Label>Nome da Marca *</Label>
               <Input
+                placeholder="Ex: Fiat, Chevrolet, Volkswagen"
                 value={nomeMarca}
                 onChange={(e) => setNomeMarca(e.target.value)}
               />
