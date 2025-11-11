@@ -196,7 +196,7 @@ export default function UsuarioPage() {
       cpf_usu: usuario.cpf_usu,
       cidade_usu: usuario.cidade_usu || "",
       telefone_usu: usuario.telefone_usu || "",
-      senha_usu: usuario.senha_usu,
+      senha_usu: "", // Deixa vazio - usuário só preenche se quiser mudar
       tipo_usu: usuario.tipo_usu,
       palavra_chave_usu: usuario.palavra_chave_usu || "",
     });
@@ -355,7 +355,7 @@ export default function UsuarioPage() {
                   type={showPassword ? "text" : "password"}
                   value={formData.senha_usu}
                   onChange={(e) => setFormData({ ...formData, senha_usu: e.target.value })}
-                  placeholder={editingUsuario ? "Deixe em branco para não alterar" : "Digite a senha (mínimo 3 caracteres)"}
+                  placeholder={editingUsuario ? "Digite nova senha apenas se quiser alterar" : "Digite a senha (mínimo 3 caracteres)"}
                 />
                 <Button
                   type="button"

@@ -19,7 +19,13 @@ router.get('/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM usuario WHERE id_usu = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado' });
-    res.json(result.rows[0]);
+    
+    const usuario = result.rows[0];
+    
+    // Retorna o usuário COM a senha criptografada (será mostrada no frontend)
+    // IMPORTANTE: Em produção, nunca retorne senhas, mesmo criptografadas
+    // Aqui estamos fazendo isso porque o requisito é mostrar a senha
+    res.json(usuario);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

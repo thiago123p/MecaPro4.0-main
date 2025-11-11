@@ -30,6 +30,18 @@ export const orcamentoService = {
     return orcamentoDAO.buscarServicos(idOrc);
   },
 
+  async update(id: string, data: { id_veic?: string; valor_total?: number; observacao?: string }): Promise<any> {
+    return orcamentoDAO.atualizar(id, data);
+  },
+
+  async removePeca(idOrc: string, idPeca: string): Promise<void> {
+    return orcamentoDAO.removerPeca(idOrc, idPeca);
+  },
+
+  async removeServico(idOrc: string, idServ: string): Promise<void> {
+    return orcamentoDAO.removerServico(idOrc, idServ);
+  },
+
   async delete(id: string): Promise<void> {
     return orcamentoDAO.deletar(id);
   },

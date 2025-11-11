@@ -8,13 +8,8 @@ export function Sidebar() {
   const userType = localStorage.getItem("userType");
 
   const handleSair = () => {
-    // Limpa os dados da sessão
-    localStorage.removeItem("userType");
-    localStorage.removeItem("token");
-    localStorage.removeItem("userId");
-    
-    // Redireciona para a tela de login
-    navigate("/");
+    // Redireciona para a tela de dashboard
+    navigate("/dashboard");
   };
 
   const menuItems = [

@@ -70,7 +70,7 @@ export default function Dashboard() {
       <Sidebar />
       <div className="flex-1 overflow-auto p-8">
         <div className="max-w-7xl mx-auto space-y-6">
-          <h1 className="text-3xl font-bold">Meus Cadastros</h1>
+          <h1 className="text-3xl font-bold">Cadastros</h1>
 
           {/* Cards de Estatísticas */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -204,7 +204,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>Meus Últimos Orçamentos</CardTitle>
+                <CardTitle>Últimos Orçamentos</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -238,7 +238,7 @@ export default function Dashboard() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Minhas Últimas OS</CardTitle>
+                <CardTitle>Últimas OS</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>

@@ -5,9 +5,10 @@ const pool = require('../db');
 router.get('/', async (req, res) => {
   try {
     const { limite } = req.query;
-  let query = `SELECT p.*, m.nome_marca, m.id_marca 
+  let query = `SELECT p.*, m.nome_marca, m.id_marca, COALESCE(e.quantidade, 0) as quantidade_estoque
    FROM pecas p 
      LEFT JOIN marca m ON p.id_marca = m.id_marca 
+     LEFT JOIN controle_estoque e ON p.id_peca = e.id_peca
      ORDER BY p.created_at DESC`;
     if (limite) query += ` LIMIT ${parseInt(limite)}`;
     const result = await pool.query(query);
@@ -21,9 +22,10 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      `SELECT p.*, m.nome_marca, m.id_marca 
+      `SELECT p.*, m.nome_marca, m.id_marca, COALESCE(e.quantidade, 0) as quantidade_estoque
        FROM pecas p 
        LEFT JOIN marca m ON p.id_marca = m.id_marca 
+       LEFT JOIN controle_estoque e ON p.id_peca = e.id_peca
        WHERE p.id_peca = $1`,
       [id]
     );
@@ -41,9 +43,10 @@ router.get('/:id', async (req, res) => {
 router.get('/pesquisar/:termo', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT p.*, m.nome_marca, m.id_marca 
+      `SELECT p.*, m.nome_marca, m.id_marca, COALESCE(e.quantidade, 0) as quantidade_estoque
        FROM pecas p 
        LEFT JOIN marca m ON p.id_marca = m.id_marca 
+       LEFT JOIN controle_estoque e ON p.id_peca = e.id_peca
        WHERE p.descricao_peca ILIKE $1 OR p.codigo_peca ILIKE $1`,
       [`%${req.params.termo}%`]
     );
@@ -87,44 +90,57 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('PUT /pecas/:id - ID:', id);
+    console.log('PUT /pecas/:id - Body:', req.body);
+    
     if (!id) {
       return res.status(400).json({ error: 'ID da peça é obrigatório' });
     }
 
-    const fields = { ...req.body };
+    const { descricao_peca, codigo_peca, preco_peca, tipo_peca, id_marca } = req.body;
     
-    // Validações dos campos
-    if (fields.descricao_peca !== undefined && !fields.descricao_peca) {
-      return res.status(400).json({ error: 'Descrição da peça não pode ser vazia' });
+    // Validações dos campos obrigatórios
+    if (!descricao_peca || descricao_peca.trim() === '') {
+      return res.status(400).json({ error: 'Descrição da peça é obrigatória' });
     }
     
-    if (fields.codigo_peca !== undefined && !fields.codigo_peca) {
-      return res.status(400).json({ error: 'Código da peça não pode ser vazio' });
+    if (!codigo_peca || codigo_peca.trim() === '') {
+      return res.status(400).json({ error: 'Código da peça é obrigatório' });
     }
 
-    if (fields.preco_peca !== undefined) {
-      const precoNum = Number(fields.preco_peca);
-      if (isNaN(precoNum) || precoNum < 0) {
-        return res.status(400).json({ error: 'Preço da peça deve ser um número positivo' });
-      }
-      fields.preco_peca = precoNum;
+    if (!tipo_peca || tipo_peca.trim() === '') {
+      return res.status(400).json({ error: 'Tipo da peça é obrigatório' });
     }
 
-    // Adiciona updated_at ao update
-    fields.updated_at = 'CURRENT_TIMESTAMP';
+    if (!id_marca || id_marca.trim() === '') {
+      return res.status(400).json({ error: 'Marca é obrigatória' });
+    }
 
-    const setClause = Object.keys(fields)
-      .filter(key => fields[key] !== undefined)
-      .map((key, i) => `${key} = ${key === 'updated_at' ? fields[key] : '$' + (i + 2)}`)
-      .join(', ');
+    // Converte para número e valida
+    const precoNum = Number(preco_peca);
+    if (isNaN(precoNum) || precoNum <= 0) {
+      return res.status(400).json({ error: 'Preço da peça deve ser um número maior que zero' });
+    }
 
-    const values = Object.entries(fields)
-      .filter(([key, value]) => key !== 'updated_at' && value !== undefined)
-      .map(([, value]) => value);
+    console.log('Atualizando peça com valores:', {
+      descricao_peca,
+      codigo_peca,
+      preco_peca: precoNum,
+      tipo_peca,
+      id_marca,
+      id
+    });
 
     const result = await pool.query(
-      `UPDATE pecas SET ${setClause} WHERE id_peca = $1 RETURNING *`,
-      [id, ...values]
+      `UPDATE pecas 
+       SET descricao_peca = $1, 
+           codigo_peca = $2, 
+           preco_peca = $3, 
+           tipo_peca = $4, 
+           id_marca = $5 
+       WHERE id_peca = $6 
+       RETURNING *`,
+      [descricao_peca, codigo_peca, precoNum, tipo_peca, id_marca, id]
     );
 
     if (result.rows.length === 0) {

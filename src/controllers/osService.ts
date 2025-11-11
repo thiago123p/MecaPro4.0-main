@@ -6,6 +6,10 @@ export const osService = {
     return osDAO.buscarTodos(limit);
   },
 
+  async getById(id: string): Promise<any> {
+    return osDAO.buscarPorId(id);
+  },
+
   async create(os: {
     id_veic: string;
     id_mec: string;
@@ -13,6 +17,15 @@ export const osService = {
     valor_total: number;
   }): Promise<any> {
     return osDAO.criar(os);
+  },
+
+  async update(id: string, os: {
+    id_veic?: string;
+    id_mec?: string;
+    valor_total?: number;
+    observacao?: string;
+  }): Promise<any> {
+    return osDAO.atualizar(id, os);
   },
 
   async addPeca(idOS: string, idPeca: string, quantidade: number): Promise<void> {
@@ -29,6 +42,14 @@ export const osService = {
 
   async getServicos(idOS: string): Promise<any[]> {
     return osDAO.buscarServicos(idOS);
+  },
+
+  async removePeca(idOS: string, idPeca: string): Promise<void> {
+    return osDAO.removerPeca(idOS, idPeca);
+  },
+
+  async removeServico(idOS: string, idServ: string): Promise<void> {
+    return osDAO.removerServico(idOS, idServ);
   },
 
   async finalizar(idOS: string, formaPagamento: string): Promise<void> {

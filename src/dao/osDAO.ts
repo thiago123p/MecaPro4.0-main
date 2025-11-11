@@ -7,6 +7,10 @@ export const osDAO = {
     return apiRequest<any[]>(url);
   },
 
+  async buscarPorId(id: string): Promise<any> {
+    return apiRequest<any>(`/os/${id}`);
+  },
+
   async criar(os: {
     id_veic: string;
     id_mec: string;
@@ -15,6 +19,18 @@ export const osDAO = {
   }): Promise<any> {
     return apiRequest<any>('/os', {
       method: 'POST',
+      body: JSON.stringify(os),
+    });
+  },
+
+  async atualizar(id: string, os: {
+    id_veic?: string;
+    id_mec?: string;
+    valor_total?: number;
+    observacao?: string;
+  }): Promise<any> {
+    return apiRequest<any>(`/os/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(os),
     });
   },
@@ -39,6 +55,14 @@ export const osDAO = {
 
   async buscarServicos(idOS: string): Promise<any[]> {
     return apiRequest<any[]>(`/os/${idOS}/servicos`);
+  },
+
+  async removerPeca(idOS: string, idPeca: string): Promise<void> {
+    await apiRequest(`/os/${idOS}/pecas/${idPeca}`, { method: 'DELETE' });
+  },
+
+  async removerServico(idOS: string, idServ: string): Promise<void> {
+    await apiRequest(`/os/${idOS}/servicos/${idServ}`, { method: 'DELETE' });
   },
 
   async finalizar(idOS: string, formaPagamento: string): Promise<void> {

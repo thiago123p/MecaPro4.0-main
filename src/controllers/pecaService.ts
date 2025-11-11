@@ -8,6 +8,7 @@ export const pecaService = {
     return data.map((p) => ({
       ...p,
       preco_peca: Number((p as any).preco_peca),
+      quantidade_estoque: Number((p as any).quantidade_estoque || 0),
     }));
   },
 
@@ -16,6 +17,7 @@ export const pecaService = {
     return data.map((p) => ({
       ...p,
       preco_peca: Number((p as any).preco_peca),
+      quantidade_estoque: Number((p as any).quantidade_estoque || 0),
     }));
   },
 
@@ -25,6 +27,7 @@ export const pecaService = {
     return {
       ...p,
       preco_peca: Number((p as any).preco_peca),
+      quantidade_estoque: Number((p as any).quantidade_estoque || 0),
     } as Peca;
   },
 
@@ -33,6 +36,7 @@ export const pecaService = {
     return data.map((p) => ({
       ...p,
       preco_peca: Number((p as any).preco_peca),
+      quantidade_estoque: Number((p as any).quantidade_estoque || 0),
     }));
   },
 

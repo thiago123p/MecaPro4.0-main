@@ -44,6 +44,21 @@ export const orcamentoDAO = {
     return apiRequest<any[]>(`/orcamentos/${idOrc}/servicos`);
   },
 
+  async atualizar(id: string, data: { id_veic?: string; valor_total?: number; observacao?: string }): Promise<any> {
+    return apiRequest<any>(`/orcamentos/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async removerPeca(idOrc: string, idPeca: string): Promise<void> {
+    await apiRequest(`/orcamentos/${idOrc}/pecas/${idPeca}`, { method: 'DELETE' });
+  },
+
+  async removerServico(idOrc: string, idServ: string): Promise<void> {
+    await apiRequest(`/orcamentos/${idOrc}/servicos/${idServ}`, { method: 'DELETE' });
+  },
+
   async deletar(id: string): Promise<void> {
     await apiRequest(`/orcamentos/${id}`, { method: 'DELETE' });
   },

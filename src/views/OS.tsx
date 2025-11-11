@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Plus, Trash2, Pencil, Printer, Search, Power } from "lucide-react";
 import { toast } from "sonner";
@@ -14,7 +16,12 @@ import { servicoService } from "@/controllers/servicoService";
 import { veiculoService } from "@/controllers/veiculoService";
 import { mecanicoService } from "@/controllers/mecanicoService";
 import { orcamentoService } from "@/controllers/orcamentoService";
+import { clienteService } from "@/controllers/clienteService";
 import { Peca, Servico, Veiculo, Mecanico } from "@/models/types";
+import { OSPrintTemplate } from "@/components/OSPrintTemplate";
+import { PDFPreviewDialog } from "@/components/PDFPreviewDialog";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 interface OSItem {
   tipo: "peca" | "servico";
@@ -32,11 +39,14 @@ export default function OS() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [showFinalizarDialog, setShowFinalizarDialog] = useState(false);
   const [showPagamentoDialog, setShowPagamentoDialog] = useState(false);
-  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [selectedOS, setSelectedOS] = useState<any>(null);
+  const [printData, setPrintData] = useState<any>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
   
   const [pecas, setPecas] = useState<Peca[]>([]);
   const [servicos, setServicos] = useState<Servico[]>([]);
@@ -48,6 +58,9 @@ export default function OS() {
   const [selectedPeca, setSelectedPeca] = useState("");
   const [selectedServico, setSelectedServico] = useState("");
   const [selectedPagamento, setSelectedPagamento] = useState("");
+  const [tipoCartao, setTipoCartao] = useState("");
+  const [parcelasCartao, setParcelasCartao] = useState("");
+  const [observacao, setObservacao] = useState("");
   const [items, setItems] = useState<OSItem[]>([]);
 
   useEffect(() => {
@@ -59,29 +72,38 @@ export default function OS() {
     loadMecanicos();
   }, []);
 
+  // Debug: monitorar mudanças na observação
+  useEffect(() => {
+    console.log("Estado da observação mudou:", observacao);
+  }, [observacao]);
+
   const loadOrdens = async () => {
     try {
-      const data = await osService.getAll();
+      const data = await osService.getAll(100); // Carrega até 100 OS
       setOrdens(data);
     } catch (error) {
+      console.error("Erro ao carregar ordens de serviço:", error);
       toast.error("Erro ao carregar ordens de serviço");
     }
   };
 
   const loadOrcamentos = async () => {
     try {
-      const data = await orcamentoService.getAll();
+      const data = await orcamentoService.getAll(100); // Carrega até 100 orçamentos
       setOrcamentos(data);
     } catch (error) {
+      console.error("Erro ao carregar orçamentos:", error);
       toast.error("Erro ao carregar orçamentos");
     }
   };
 
   const loadPecas = async () => {
     try {
-      const data = await pecaService.getAll();
+      const data = await pecaService.getAllUnlimited();
+      console.log("Peças carregadas:", data);
       setPecas(data);
     } catch (error) {
+      console.error("Erro ao carregar peças:", error);
       toast.error("Erro ao carregar peças");
     }
   };
@@ -157,12 +179,18 @@ export default function OS() {
 
     try {
       const userId = localStorage.getItem("userId");
-      const os = await osService.create({
+      const osData: any = {
         id_veic: selectedVeiculo,
         id_mec: selectedMecanico,
         id_usu: userId || "",
         valor_total: calculateTotal()
-      });
+      };
+      
+      if (observacao && observacao.trim() !== '') {
+        osData.observacao = observacao;
+      }
+      
+      const os = await osService.create(osData);
 
       for (const item of items) {
         if (item.tipo === "peca") {
@@ -200,20 +228,179 @@ export default function OS() {
       return;
     }
 
+    if (selectedPagamento === "cartao") {
+      if (!tipoCartao) {
+        toast.error("Selecione o tipo de cartão (Débito ou Crédito)");
+        return;
+      }
+      if (tipoCartao === "credito" && !parcelasCartao) {
+        toast.error("Selecione o número de parcelas");
+        return;
+      }
+    }
+
     try {
-      await osService.finalizar(selectedOS.id_os, selectedPagamento);
+      // Montar descrição completa do pagamento
+      let formaPagamentoCompleta = selectedPagamento;
+      if (selectedPagamento === "cartao") {
+        formaPagamentoCompleta = `Cartão ${tipoCartao === "debito" ? "Débito" : "Crédito"}`;
+        if (tipoCartao === "credito" && parcelasCartao) {
+          formaPagamentoCompleta += ` - ${parcelasCartao}`;
+        }
+      }
+
+      await osService.finalizar(selectedOS.id_os, formaPagamentoCompleta);
       setShowPagamentoDialog(false);
       setShowFinalizarDialog(false);
-      setShowSuccessDialog(true);
+      setSelectedPagamento("");
+      setTipoCartao("");
+      setParcelasCartao("");
       loadOrdens();
+      
+      // Após encerrar, abrir preview para impressão
+      toast.success("OS encerrada com sucesso!");
+      
+      // Recarregar a OS encerrada e abrir preview
+      const osEncerrada = await osService.getById(selectedOS.id_os);
+      setSelectedOS(osEncerrada);
+      await handleOpenPreview(osEncerrada);
     } catch (error) {
       toast.error("Erro ao finalizar OS");
+    }
+  };
+
+  const handleOpenPreview = async (os?: any) => {
+    const osToPreview = os || selectedOS;
+    if (!osToPreview) return;
+
+    try {
+      // Buscar dados completos da OS
+      const osCompleta = await osService.getById(osToPreview.id_os);
+      const pecasOS = await osService.getPecas(osToPreview.id_os);
+      const servicosOS = await osService.getServicos(osToPreview.id_os);
+
+      // Buscar dados do veículo e cliente
+      const veiculo = veiculos.find((v) => v.id_veic === osCompleta.id_veic);
+      const mecanico = mecanicos.find((m) => m.id_mec === osCompleta.id_mec);
+      
+      let cliente = null;
+      if (veiculo?.id_cli) {
+        cliente = await clienteService.getById(veiculo.id_cli);
+      }
+
+      // Buscar o veículo completo com marca se não tiver
+      let veiculoCompleto = veiculo;
+      if (veiculo && !veiculo.nome_marca) {
+        veiculoCompleto = await veiculoService.getById(veiculo.id_veic);
+      }
+
+      // Preparar itens
+      const allItems = [
+        ...pecasOS.map((p: any) => ({
+          tipo: "peca",
+          id: p.id_peca,
+          descricao: p.descricao_peca,
+          valor: Number(p.preco_peca || 0),
+          quantidade: Number(p.quantidade || 1),
+        })),
+        ...servicosOS.map((s: any) => ({
+          tipo: "servico",
+          id: s.id_serv,
+          descricao: s.descricao_serv,
+          valor: Number(s.valor_serv || 0),
+          quantidade: Number(s.quantidade || 1),
+        })),
+      ];
+
+      // Definir dados de impressão
+      setPrintData({
+        os: osCompleta,
+        items: allItems,
+        veiculo: veiculoCompleto,
+        cliente,
+        mecanico,
+      });
+
+      setShowPrintDialog(false);
+      setShowPreviewDialog(true);
+    } catch (error) {
+      console.error("Erro ao carregar preview:", error);
+      toast.error("Erro ao carregar preview da OS");
     }
   };
 
   const handlePrint = () => {
     window.print();
     setShowPrintDialog(false);
+  };
+
+  const handleGeneratePDF = async () => {
+    if (!printData) return;
+
+    try {
+      setIsGeneratingPDF(true);
+      toast.info("Gerando PDF...");
+
+      // Criar elemento temporário para renderizar
+      const tempDiv = document.createElement("div");
+      tempDiv.style.position = "absolute";
+      tempDiv.style.left = "-9999px";
+      tempDiv.style.top = "0";
+      document.body.appendChild(tempDiv);
+
+      // Renderizar template no elemento temporário
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(tempDiv);
+      
+      await new Promise<void>((resolve) => {
+        root.render(
+          <OSPrintTemplate
+            os={printData.os}
+            items={printData.items}
+            veiculo={printData.veiculo}
+            cliente={printData.cliente}
+            mecanico={printData.mecanico}
+            showAllPages={printData.os.status !== "encerrada"}
+          />
+        );
+        setTimeout(() => resolve(), 500);
+      });
+
+      const canvas = await html2canvas(tempDiv.firstChild as HTMLElement, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: 794, // A4 width in pixels at 96 DPI
+        windowHeight: 1123, // A4 height in pixels at 96 DPI
+      });
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+
+      pdf.save(`OS_${printData.os.numero_os}.pdf`);
+      
+      // Limpar
+      root.unmount();
+      document.body.removeChild(tempDiv);
+      
+      toast.success("PDF gerado com sucesso!");
+      setShowPreviewDialog(false);
+      setPrintData(null);
+      setIsGeneratingPDF(false);
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast.error("Erro ao gerar PDF");
+      setIsGeneratingPDF(false);
+    }
   };
 
   const handleSearch = async () => {
@@ -234,7 +421,144 @@ export default function OS() {
     setSelectedMecanico("");
     setSelectedPeca("");
     setSelectedServico("");
+    setObservacao("");
     setItems([]);
+  };
+
+  const handleEdit = async (os: any) => {
+    try {
+      console.log("Iniciando edição da OS:", os.id_os);
+      setSelectedOS(os);
+      
+      // Carregar dados da OS
+      console.log("Buscando OS completa...");
+      const osCompleta = await osService.getById(os.id_os);
+      console.log("OS carregada:", osCompleta);
+      console.log("Observação retornada do backend:", osCompleta.observacao);
+      
+      // Preencher formulário
+      setSelectedVeiculo(osCompleta.id_veic);
+      setSelectedMecanico(osCompleta.id_mec);
+      setObservacao(osCompleta.observacao || "");
+      console.log("Observação setada no estado:", osCompleta.observacao || "");
+      
+      // Carregar peças e serviços
+      console.log("Buscando peças...");
+      const pecasOS = await osService.getPecas(os.id_os);
+      console.log("Peças encontradas:", pecasOS.length);
+      
+      console.log("Buscando serviços...");
+      const servicosOS = await osService.getServicos(os.id_os);
+      console.log("Serviços encontrados:", servicosOS.length);
+      
+      const newItems: OSItem[] = [];
+      
+      // Adicionar peças
+      pecasOS.forEach((p: any) => {
+        console.log("Adicionando peça:", p);
+        newItems.push({
+          tipo: "peca",
+          id: p.id_peca,
+          descricao: p.descricao_peca || "Peça sem descrição",
+          valor: Number(p.preco_peca || 0),
+          quantidade: Number(p.quantidade || 1)
+        });
+      });
+      
+      // Adicionar serviços
+      servicosOS.forEach((s: any) => {
+        console.log("Adicionando serviço:", s);
+        newItems.push({
+          tipo: "servico",
+          id: s.id_serv,
+          descricao: s.descricao_serv || "Serviço sem descrição",
+          valor: Number(s.valor_serv || 0),
+          quantidade: Number(s.quantidade || 1)
+        });
+      });
+      
+      console.log("Total de itens carregados:", newItems.length);
+      setItems(newItems);
+      
+      // Aguardar um tick para garantir que o estado foi atualizado
+      setTimeout(() => {
+        console.log("Abrindo diálogo de edição com observação:", osCompleta.observacao);
+        setShowEditDialog(true);
+      }, 100);
+      
+    } catch (error: any) {
+      console.error("Erro detalhado ao carregar OS:", error);
+      console.error("Mensagem:", error.message);
+      console.error("Stack:", error.stack);
+      toast.error("Erro ao carregar dados da OS: " + (error.message || "Erro desconhecido"));
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedOS || !selectedVeiculo || !selectedMecanico || items.length === 0) {
+      toast.error("Preencha todos os campos e adicione itens");
+      return;
+    }
+
+    try {
+      // Atualizar dados básicos da OS
+      const updateData: any = {
+        id_veic: selectedVeiculo,
+        id_mec: selectedMecanico,
+        valor_total: calculateTotal()
+      };
+      
+      if (observacao && observacao.trim() !== '') {
+        updateData.observacao = observacao;
+      }
+      
+      await osService.update(selectedOS.id_os, updateData);
+
+      // Remover todas as peças e serviços antigos
+      try {
+        const pecasAntigas = await osService.getPecas(selectedOS.id_os);
+        for (const peca of pecasAntigas) {
+          try {
+            await osService.removePeca(selectedOS.id_os, peca.id_peca);
+          } catch (err) {
+            console.warn("Erro ao remover peça:", err);
+          }
+        }
+      } catch (err) {
+        console.warn("Erro ao buscar peças antigas:", err);
+      }
+      
+      try {
+        const servicosAntigos = await osService.getServicos(selectedOS.id_os);
+        for (const servico of servicosAntigos) {
+          try {
+            await osService.removeServico(selectedOS.id_os, servico.id_serv);
+          } catch (err) {
+            console.warn("Erro ao remover serviço:", err);
+          }
+        }
+      } catch (err) {
+        console.warn("Erro ao buscar serviços antigos:", err);
+      }
+
+      // Adicionar novos itens
+      for (const item of items) {
+        if (item.tipo === "peca") {
+          await osService.addPeca(selectedOS.id_os, item.id, item.quantidade);
+        } else {
+          await osService.addServico(selectedOS.id_os, item.id, item.quantidade);
+        }
+      }
+
+      toast.success("OS atualizada com sucesso!");
+      setShowEditDialog(false);
+      resetForm();
+      setSelectedOS(null);
+      loadOrdens();
+    } catch (error) {
+      console.error("Erro ao atualizar OS:", error);
+      toast.error("Erro ao atualizar OS");
+    }
   };
 
   const handleImportOrcamento = async (orcamentoId: string) => {
@@ -346,10 +670,9 @@ export default function OS() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
-                          setSelectedOS(os);
-                          setShowEditDialog(true);
-                        }}
+                        onClick={() => handleEdit(os)}
+                        disabled={os.status !== "aberta"}
+                        title={os.status !== "aberta" ? "Não é possível editar OS encerrada" : "Editar OS"}
                       >
                         <Pencil className="w-4 h-4" />
                       </Button>
@@ -436,18 +759,23 @@ export default function OS() {
                   <div>
                     <label className="text-sm font-medium">Adicionar Peça</label>
                     <div className="flex gap-2">
-                      <Select value={selectedPeca} onValueChange={setSelectedPeca}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a peça" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {pecas.map((p) => (
-                            <SelectItem key={p.id_peca} value={p.id_peca}>
-                              {p.descricao_peca} - R$ {Number(p.preco_peca).toFixed(2)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Combobox
+                        options={pecas.map(p => {
+                          const estoqueZerado = (p.quantidade_estoque || 0) <= 0;
+                          const prefix = estoqueZerado ? "* " : "";
+                          console.log(`Peça ${p.descricao_peca}: quantidade_estoque =`, p.quantidade_estoque, "estoqueZerado =", estoqueZerado);
+                          return {
+                            value: p.id_peca,
+                            label: `${prefix}${p.descricao_peca} - R$ ${Number(p.preco_peca).toFixed(2)}${estoqueZerado ? ' (SEM ESTOQUE)' : ''}`
+                          };
+                        })}
+                        value={selectedPeca}
+                        onValueChange={setSelectedPeca}
+                        placeholder="Pesquisar peça..."
+                        searchPlaceholder="Digite para pesquisar..."
+                        emptyText="Nenhuma peça encontrada."
+                        className="flex-1"
+                      />
                       <Button onClick={handleAddPeca}>Adicionar</Button>
                     </div>
                   </div>
@@ -455,21 +783,31 @@ export default function OS() {
                   <div>
                     <label className="text-sm font-medium">Adicionar Serviço</label>
                     <div className="flex gap-2">
-                      <Select value={selectedServico} onValueChange={setSelectedServico}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o serviço" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {servicos.map((s) => (
-                            <SelectItem key={s.id_serv} value={s.id_serv}>
-                              {s.descricao_serv} - R$ {Number(s.valor_final_serv || s.valor_serv).toFixed(2)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Combobox
+                        options={servicos.map(s => ({
+                          value: s.id_serv,
+                          label: `${s.descricao_serv} - R$ ${Number(s.valor_final_serv || s.valor_serv).toFixed(2)}`
+                        }))}
+                        value={selectedServico}
+                        onValueChange={setSelectedServico}
+                        placeholder="Pesquisar serviço..."
+                        searchPlaceholder="Digite para pesquisar..."
+                        emptyText="Nenhum serviço encontrado."
+                        className="flex-1"
+                      />
                       <Button onClick={handleAddServico}>Adicionar</Button>
                     </div>
                   </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Observações</label>
+                  <Textarea
+                    placeholder="Digite aqui observações sobre a ordem de serviço..."
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                    rows={3}
+                  />
                 </div>
 
                 <div className="border rounded-lg p-4">
@@ -532,6 +870,162 @@ export default function OS() {
             </DialogContent>
           </Dialog>
 
+          <Dialog open={showEditDialog} onOpenChange={setShowEditDialog} key={selectedOS?.id_os}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Editar Ordem de Serviço #{selectedOS?.numero_os}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Veículo</label>
+                    <Select value={selectedVeiculo} onValueChange={setSelectedVeiculo}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o veículo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {veiculos.map((v) => (
+                          <SelectItem key={v.id_veic} value={v.id_veic}>
+                            {v.descricao_veic} - {v.placa_veic}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium">Mecânico</label>
+                    <Select value={selectedMecanico} onValueChange={setSelectedMecanico}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o mecânico" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {mecanicos.map((m) => (
+                          <SelectItem key={m.id_mec} value={m.id_mec}>
+                            {m.nome_mec}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Adicionar Peça</label>
+                    <div className="flex gap-2">
+                      <Combobox
+                        options={pecas.map(p => {
+                          const estoqueZerado = (p.quantidade_estoque || 0) <= 0;
+                          const prefix = estoqueZerado ? "* " : "";
+                          console.log(`[EDITAR] Peça ${p.descricao_peca}: quantidade_estoque =`, p.quantidade_estoque, "estoqueZerado =", estoqueZerado);
+                          return {
+                            value: p.id_peca,
+                            label: `${prefix}${p.descricao_peca} - R$ ${Number(p.preco_peca).toFixed(2)}${estoqueZerado ? ' (SEM ESTOQUE)' : ''}`
+                          };
+                        })}
+                        value={selectedPeca}
+                        onValueChange={setSelectedPeca}
+                        placeholder="Pesquisar peça..."
+                        searchPlaceholder="Digite para pesquisar..."
+                        emptyText="Nenhuma peça encontrada."
+                        className="flex-1"
+                      />
+                      <Button onClick={handleAddPeca}>Adicionar</Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium">Adicionar Serviço</label>
+                    <div className="flex gap-2">
+                      <Combobox
+                        options={servicos.map(s => ({
+                          value: s.id_serv,
+                          label: `${s.descricao_serv} - R$ ${Number(s.valor_final_serv || s.valor_serv).toFixed(2)}`
+                        }))}
+                        value={selectedServico}
+                        onValueChange={setSelectedServico}
+                        placeholder="Pesquisar serviço..."
+                        searchPlaceholder="Digite para pesquisar..."
+                        emptyText="Nenhum serviço encontrado."
+                        className="flex-1"
+                      />
+                      <Button onClick={handleAddServico}>Adicionar</Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Observações</label>
+                  <Textarea
+                    key={`edit-obs-${selectedOS?.id_os}`}
+                    placeholder="Digite aqui observações sobre a ordem de serviço..."
+                    defaultValue={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-semibold mb-2">Itens da OS</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Valor Unit.</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{item.tipo === "peca" ? "Peça" : "Serviço"}</TableCell>
+                          <TableCell>{item.descricao}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              value={item.quantidade}
+                              onChange={(e) => {
+                                const newItems = [...items];
+                                newItems[index].quantidade = parseFloat(e.target.value) || 1;
+                                setItems(newItems);
+                              }}
+                              className="w-20"
+                            />
+                          </TableCell>
+                          <TableCell>R$ {item.valor.toFixed(2)}</TableCell>
+                          <TableCell>R$ {(item.valor * item.quantidade).toFixed(2)}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setItems(items.filter((_, i) => i !== index))}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="mt-4 text-right text-lg font-bold">
+                    Valor Total: R$ {calculateTotal().toFixed(2)}
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setShowEditDialog(false); resetForm(); setSelectedOS(null); }}>Fechar</Button>
+                <Button variant="outline" onClick={resetForm}>Limpar</Button>
+                <Button onClick={handleUpdate}>Atualizar OS</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -572,61 +1066,161 @@ export default function OS() {
                 <DialogTitle>Forma de Pagamento</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                <Select value={selectedPagamento} onValueChange={setSelectedPagamento}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a forma de pagamento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                    <SelectItem value="cartao">Cartão</SelectItem>
-                    <SelectItem value="pix">PIX</SelectItem>
-                    <SelectItem value="boleto">Boleto</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Forma de Pagamento</label>
+                  <Select 
+                    value={selectedPagamento} 
+                    onValueChange={(value) => {
+                      setSelectedPagamento(value);
+                      setTipoCartao("");
+                      setParcelasCartao("");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a forma de pagamento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                      <SelectItem value="cartao">Cartão</SelectItem>
+                      <SelectItem value="pix">PIX</SelectItem>
+                      <SelectItem value="transferencia">Transferência</SelectItem>
+                      <SelectItem value="boleto">Boleto</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedPagamento === "cartao" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Tipo de Cartão</label>
+                    <Select 
+                      value={tipoCartao} 
+                      onValueChange={(value) => {
+                        setTipoCartao(value);
+                        setParcelasCartao("");
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo de cartão" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="debito">Débito</SelectItem>
+                        <SelectItem value="credito">Crédito</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {selectedPagamento === "cartao" && tipoCartao === "credito" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Número de Parcelas</label>
+                    <Select value={parcelasCartao} onValueChange={setParcelasCartao}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione as parcelas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1x">1x sem juros</SelectItem>
+                        <SelectItem value="2x">2x sem juros</SelectItem>
+                        <SelectItem value="3x">3x sem juros</SelectItem>
+                        <SelectItem value="4x">4x sem juros</SelectItem>
+                        <SelectItem value="5x">5x sem juros</SelectItem>
+                        <SelectItem value="6x">6x sem juros</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setShowPagamentoDialog(false)}>Cancelar</Button>
+                <Button variant="outline" onClick={() => {
+                  setShowPagamentoDialog(false);
+                  setSelectedPagamento("");
+                  setTipoCartao("");
+                  setParcelasCartao("");
+                }}>Cancelar</Button>
                 <Button onClick={handleFinalizar}>Confirmar</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
 
-          <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-            <DialogContent>
+          <Dialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
+            <DialogContent className="max-w-3xl">
               <DialogHeader>
-                <DialogTitle>OS Encerrada</DialogTitle>
+                <DialogTitle>Imprimir OS #{selectedOS?.numero_os}</DialogTitle>
               </DialogHeader>
-              <div className="text-center py-4">
-                <p className="text-lg">Ordem de Serviço finalizada com sucesso!</p>
+              <div className="space-y-4">
+                <div className="border rounded-lg p-4 bg-muted/50">
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Número OS:</span>
+                      <span>{selectedOS?.numero_os}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Veículo:</span>
+                      <span>{selectedOS?.descricao_veic} - {selectedOS?.placa_veic}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Cliente:</span>
+                      <span>{selectedOS?.nome_cli}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Mecânico:</span>
+                      <span>{selectedOS?.nome_mec}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Status:</span>
+                      <span className="capitalize">{selectedOS?.status}</span>
+                    </div>
+                    <div className="flex justify-between text-lg font-bold pt-2 border-t">
+                      <span>Valor Total:</span>
+                      <span>R$ {Number(selectedOS?.valor_total || 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setShowSuccessDialog(false)}>Fechar</Button>
-                <Button onClick={() => { window.print(); setShowSuccessDialog(false); }}>Imprimir</Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowPrintDialog(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={() => handleOpenPreview()}
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  Visualizar Impressão
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
 
-          <Dialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Imprimir OS</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <p>Preview da OS #{selectedOS?.numero_os}</p>
-                <div className="border p-4 rounded">
-                  <p><strong>Veículo:</strong> {selectedOS?.descricao_veic} - {selectedOS?.placa_veic}</p>
-                  <p><strong>Cliente:</strong> {selectedOS?.nome_cli}</p>
-                  <p><strong>Mecânico:</strong> {selectedOS?.nome_mec}</p>
-                  <p><strong>Status:</strong> {selectedOS?.status}</p>
-                  <p><strong>Valor Total:</strong> R$ {Number(selectedOS?.valor_total || 0).toFixed(2)}</p>
-                </div>
+          {/* Diálogo de Preview com PDF */}
+          <PDFPreviewDialog
+            open={showPreviewDialog}
+            onClose={() => {
+              setShowPreviewDialog(false);
+              setPrintData(null);
+            }}
+            onPrint={handleGeneratePDF}
+            printData={printData}
+            isGenerating={isGeneratingPDF}
+          />
+
+          {/* Template oculto para geração de PDF */}
+          <div className="hidden">
+            {printData && (
+              <div ref={printRef}>
+                <OSPrintTemplate
+                  os={printData.os}
+                  items={printData.items}
+                  veiculo={printData.veiculo}
+                  cliente={printData.cliente}
+                  mecanico={printData.mecanico}
+                  showAllPages={printData.os.status !== "encerrada"}
+                />
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowPrintDialog(false)}>Cancelar</Button>
-                <Button onClick={handlePrint}>Imprimir</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            )}
+          </div>
 
           <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
             <DialogContent>

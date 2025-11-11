@@ -4,9 +4,11 @@ export interface Cliente {
   id_cli: string;
   nome_cli: string;
   endereco_cli?: string;
+  numero_cli?: string;
   cpf_cli: string;
   cidade_cli?: string;
   telefone_cli?: string;
+  celular_cli?: string;
   created_at?: string;
 }
 
@@ -45,6 +47,9 @@ export interface Veiculo {
   descricao_veic: string;
   placa_veic: string;
   ano_veic?: number;
+  cor_veic?: string;
+  km_veic?: string;
+  marca_veic?: string;
   id_marca?: string;
   id_cli: string;
   created_at?: string;
@@ -64,6 +69,7 @@ export interface Peca {
   id_marca?: string;
   created_at?: string;
   marca?: Marca;
+  quantidade_estoque?: number; // Quantidade em estoque
 }
 
 export interface ControleEstoque {
@@ -91,6 +97,7 @@ export interface Orcamento {
   id_usu?: string;
   data_abertura: string;
   valor_total: number;
+  observacao?: string;
   veiculo?: Veiculo;
   usuario?: Usuario;
   // Campos do JOIN (quando retornados flat pelo backend)
@@ -127,9 +134,12 @@ export interface OS {
   id_usu?: string;
   data_abertura: string;
   data_encerramento?: string;
+  criado_em?: string;
+  finalizado_em?: string;
   valor_total: number;
   forma_pagamento?: string;
   status: string;
+  observacao?: string;
   veiculo?: Veiculo;
   mecanico?: Mecanico;
   usuario?: Usuario;
