@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { registrarMovimentacao } = require('./logMovimentacoesRoutes');
 
 router.get('/', async (req, res) => {
   try {
@@ -61,6 +62,20 @@ router.post('/', async (req, res) => {
     );
     console.log('Orçamento criado com sucesso:', result.rows[0]);
     console.log('Observação salva:', observacaoValue);
+    
+    // Registrar movimentação
+    if (usuarioId) {
+      await registrarMovimentacao(
+        usuarioId,
+        'orcamento',
+        'criar',
+        result.rows[0].id_orc,
+        result.rows[0].numero_orc,
+        valor_total,
+        'Orçamento criado'
+      );
+    }
+    
     res.status(201).json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -162,6 +177,20 @@ router.put('/:id', async (req, res) => {
     }
 
     console.log('Orçamento atualizado com sucesso:', result.rows[0]);
+    
+    // Registrar movimentação
+    if (result.rows[0].id_usu) {
+      await registrarMovimentacao(
+        result.rows[0].id_usu,
+        'orcamento',
+        'editar',
+        result.rows[0].id_orc,
+        result.rows[0].numero_orc,
+        result.rows[0].valor_total,
+        'Orçamento editado'
+      );
+    }
+    
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Erro ao atualizar orçamento:', error);
@@ -209,6 +238,20 @@ router.delete('/:id', async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM orcamento WHERE id_orc = $1 RETURNING *', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Orçamento não encontrado' });
+    
+    // Registrar movimentação
+    if (result.rows[0].id_usu) {
+      await registrarMovimentacao(
+        result.rows[0].id_usu,
+        'orcamento',
+        'excluir',
+        result.rows[0].id_orc,
+        result.rows[0].numero_orc,
+        result.rows[0].valor_total,
+        'Orçamento excluído'
+      );
+    }
+    
     res.json({ message: 'Orçamento deletado com sucesso' });
   } catch (error) {
     res.status(500).json({ error: error.message });

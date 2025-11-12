@@ -1,36 +1,45 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Trash2 } from "lucide-react";
+import { Search, Trash2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { usuarioService } from "@/controllers/usuarioService";
 import { orcamentoService } from "@/controllers/orcamentoService";
 import { osService } from "@/controllers/osService";
 import { historicoRelatorioService, HistoricoRelatorio } from "@/controllers/historicoRelatorioService";
+import { logMovimentacoesService, LogMovimentacao } from "@/controllers/logMovimentacoesService";
 import { Usuario } from "@/models/types";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { RelatorioPDFPreviewDialog } from "@/components/RelatorioPDFPreviewDialog";
+import { RelatorioPrintTemplate } from "@/components/RelatorioPrintTemplate";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 export default function Relatorio() {
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
-  const [showPdfDialog, setShowPdfDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showPrintConfirmDialog, setShowPrintConfirmDialog] = useState(false);
+  const [showPrintPreviewDialog, setShowPrintPreviewDialog] = useState(false);
   
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [selectedUsuario, setSelectedUsuario] = useState("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [reportData, setReportData] = useState<any>({
-    orcamentos: [],
-    ordens: [],
+    movimentacoes: [],
     usuario: null
   });
   
   const [historico, setHistorico] = useState<HistoricoRelatorio[]>([]);
   const [historicoToDelete, setHistoricoToDelete] = useState<string | null>(null);
+  const [historicoToPrint, setHistoricoToPrint] = useState<HistoricoRelatorio | null>(null);
+  const [printData, setPrintData] = useState<any>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadUsuarios();
@@ -77,34 +86,44 @@ export default function Relatorio() {
     }
 
     try {
+      console.log("[RELATORIO] Gerando relatório para usuário:", selectedUsuario);
+      console.log("[RELATORIO] Período:", dataInicio, "até", dataFim);
+      
       const usuario = usuarios.find(u => u.id_usu === selectedUsuario);
       
-      const todosOrcamentos = await orcamentoService.getAll(1000);
-      const orcamentosFiltrados = todosOrcamentos.filter((orc: any) => {
-        const dataOrc = new Date(orc.data_abertura);
-        const inicio = new Date(dataInicio);
-        const fim = new Date(dataFim);
-        return orc.id_usu === selectedUsuario && dataOrc >= inicio && dataOrc <= fim;
-      });
+      // Buscar movimentações do log
+      const movimentacoes = await logMovimentacoesService.getByUsuario(
+        selectedUsuario,
+        `${dataInicio} 00:00:00`,
+        `${dataFim} 23:59:59`
+      );
 
-      const todasOS = await osService.getAll(1000);
-      const osFiltradas = todasOS.filter((os: any) => {
-        const dataOS = new Date(os.data_abertura);
-        const inicio = new Date(dataInicio);
-        const fim = new Date(dataFim);
-        return os.id_usu === selectedUsuario && dataOS >= inicio && dataOS <= fim;
-      });
+      console.log("[RELATORIO] Movimentações encontradas:", movimentacoes.length);
+
+      // Separar por tipo
+      const orcamentos = movimentacoes.filter(m => m.tipo_movimentacao === 'orcamento');
+      const ordens = movimentacoes.filter(m => m.tipo_movimentacao === 'os');
+
+      console.log("[RELATORIO] Orçamentos:", orcamentos.length);
+      console.log("[RELATORIO] OS:", ordens.length);
 
       setReportData({
-        orcamentos: orcamentosFiltrados,
-        ordens: osFiltradas,
+        movimentacoes,
+        orcamentos,
+        ordens,
         usuario: usuario
       });
 
       // Calcular totais
-      const valorTotalOrcamentos = orcamentosFiltrados.reduce((total: number, orc: any) => total + Number(orc.valor_total || 0), 0);
-      const valorTotalOS = osFiltradas.reduce((total: number, os: any) => total + Number(os.valor_total || 0), 0);
+      const valorTotalOrcamentos = orcamentos.reduce((total: number, m: LogMovimentacao) => total + Number(m.valor_total || 0), 0);
+      const valorTotalOS = ordens.reduce((total: number, m: LogMovimentacao) => total + Number(m.valor_total || 0), 0);
       const valorTotalGeral = valorTotalOrcamentos + valorTotalOS;
+
+      console.log("[RELATORIO] Totais calculados:", {
+        valorTotalOrcamentos,
+        valorTotalOS,
+        valorTotalGeral
+      });
 
       // Salvar no histórico (se disponível)
       try {
@@ -113,9 +132,9 @@ export default function Relatorio() {
           id_usuario_gerador: localStorage.getItem('userId') || 'admin',
           data_inicio: dataInicio,
           data_fim: dataFim,
-          total_orcamentos: orcamentosFiltrados.length,
+          total_orcamentos: orcamentos.length,
           valor_total_orcamentos: valorTotalOrcamentos,
-          total_os: osFiltradas.length,
+          total_os: ordens.length,
           valor_total_os: valorTotalOS,
           valor_total_geral: valorTotalGeral
         });
@@ -128,23 +147,20 @@ export default function Relatorio() {
 
       setShowReportDialog(false);
       setShowSearchDialog(false);
-      setShowPdfDialog(true);
-      toast.success("Relatório gerado com sucesso!");
+      // Não abrir mais o dialog antigo - usuário verá no histórico
+      toast.success("Relatório gerado e salvo no histórico! Use o botão de impressora para visualizar.");
     } catch (error) {
+      console.error("[RELATORIO] Erro ao gerar relatório:", error);
       toast.error("Erro ao gerar relatório");
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const calcularTotalOrcamentos = () => {
-    return reportData.orcamentos.reduce((total: number, orc: any) => total + Number(orc.valor_total || 0), 0);
+    return reportData.orcamentos?.reduce((total: number, m: LogMovimentacao) => total + Number(m.valor_total || 0), 0) || 0;
   };
 
   const calcularTotalOS = () => {
-    return reportData.ordens.reduce((total: number, os: any) => total + Number(os.valor_total || 0), 0);
+    return reportData.ordens?.reduce((total: number, m: LogMovimentacao) => total + Number(m.valor_total || 0), 0) || 0;
   };
 
   const handleDeleteHistorico = (id: string) => {
@@ -164,6 +180,119 @@ export default function Relatorio() {
     } finally {
       setShowDeleteDialog(false);
       setHistoricoToDelete(null);
+    }
+  };
+
+  // Função para abrir dialog de confirmação de impressão
+  const handleImprimirRelatorio = (relatorio: HistoricoRelatorio) => {
+    setHistoricoToPrint(relatorio);
+    setShowPrintConfirmDialog(true);
+  };
+
+  // Função para visualizar impressão (abre preview)
+  const handleVisualizarImpressao = async () => {
+    if (!historicoToPrint) return;
+
+    try {
+      setShowPrintConfirmDialog(false);
+      
+      console.log("[VISUALIZAR IMPRESSAO] Relatório selecionado:", historicoToPrint);
+      
+      // Preparar dados para impressão
+      const usuario = usuarios.find(u => u.id_usu === historicoToPrint.id_usuario_consultado);
+      
+      console.log("[VISUALIZAR IMPRESSAO] Usuário encontrado:", usuario);
+      
+      // Converter datas ISO para formato YYYY-MM-DD HH:MM:SS
+      const dataInicioDate = new Date(historicoToPrint.data_inicio);
+      const dataFimDate = new Date(historicoToPrint.data_fim);
+      
+      // Formatar para YYYY-MM-DD HH:MM:SS
+      const formatarDataParaSQL = (data: Date, hora: string) => {
+        const ano = data.getFullYear();
+        const mes = String(data.getMonth() + 1).padStart(2, '0');
+        const dia = String(data.getDate()).padStart(2, '0');
+        return `${ano}-${mes}-${dia} ${hora}`;
+      };
+      
+      const dataInicioFormatada = formatarDataParaSQL(dataInicioDate, '00:00:00');
+      const dataFimFormatada = formatarDataParaSQL(dataFimDate, '23:59:59');
+      
+      console.log("[VISUALIZAR IMPRESSAO] Buscando movimentações do período:", {
+        inicio: dataInicioFormatada,
+        fim: dataFimFormatada
+      });
+      
+      const movimentacoes = await logMovimentacoesService.getByUsuario(
+        historicoToPrint.id_usuario_consultado || '', 
+        dataInicioFormatada, 
+        dataFimFormatada
+      );
+      
+      console.log("[VISUALIZAR IMPRESSAO] Movimentações recebidas:", movimentacoes);
+      console.log("[VISUALIZAR IMPRESSAO] Total de movimentações:", movimentacoes.length);
+
+      setPrintData({
+        usuario: usuario,
+        dataInicio: historicoToPrint.data_inicio,
+        dataFim: historicoToPrint.data_fim,
+        movimentacoes: movimentacoes
+      });
+
+      setShowPrintPreviewDialog(true);
+    } catch (error) {
+      console.error("Erro ao preparar impressão:", error);
+      toast.error("Erro ao preparar impressão do relatório");
+    }
+  };
+
+  // Função para gerar PDF
+  const handlePrintRelatorio = async () => {
+    if (!printRef.current || !printData) return;
+
+    setIsGeneratingPDF(true);
+
+    try {
+      const element = printRef.current;
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+      const imgX = (pdfWidth - imgWidth * ratio) / 2;
+      const imgY = 0;
+
+      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+
+      const usuario = printData.usuario;
+      const dataInicioFormatada = new Date(printData.dataInicio).toLocaleDateString('pt-BR');
+      const dataFimFormatada = new Date(printData.dataFim).toLocaleDateString('pt-BR');
+      const fileName = `Relatorio_${usuario?.nome_usu || 'Usuario'}_${dataInicioFormatada.replace(/\//g, '-')}_a_${dataFimFormatada.replace(/\//g, '-')}.pdf`;
+
+      pdf.save(fileName);
+      
+      toast.success("PDF gerado com sucesso!");
+      setShowPrintPreviewDialog(false);
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast.error("Erro ao gerar PDF");
+    } finally {
+      setIsGeneratingPDF(false);
     }
   };
 
@@ -230,13 +359,24 @@ export default function Relatorio() {
                           {formatarValor(item.valor_total_geral)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteHistorico(item.id_historico)}
-                          >
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleImprimirRelatorio(item)}
+                              title="Imprimir relatório"
+                            >
+                              <Printer className="w-4 h-4 text-blue-500" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteHistorico(item.id_historico)}
+                              title="Excluir relatório"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -244,13 +384,6 @@ export default function Relatorio() {
                 </Table>
               </div>
             )}
-          </div>
-
-          <div className="bg-card rounded-lg border p-8">
-            <div className="text-center text-muted-foreground">
-              <p className="text-lg mb-4">Selecione um usuário para visualizar o relatório de movimentações</p>
-              <p className="text-sm">Clique no botão "Gerar Relatório" no canto superior direito</p>
-            </div>
           </div>
 
           <Dialog open={showSearchDialog} onOpenChange={setShowSearchDialog}>
@@ -330,111 +463,6 @@ export default function Relatorio() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={showPdfDialog} onOpenChange={setShowPdfDialog}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Relatório de Movimentações</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-6 p-6 border rounded-lg">
-                <div className="text-center border-b pb-4">
-                  <h2 className="text-2xl font-bold text-primary">MecaPro</h2>
-                  <p className="text-lg mt-2">Relatório de Movimentações</p>
-                </div>
-
-                <div className="space-y-2">
-                  <p><strong>Usuário:</strong> {reportData.usuario?.nome_usu}</p>
-                  <p><strong>Tipo:</strong> {reportData.usuario?.tipo_usu}</p>
-                  <p><strong>CPF:</strong> {reportData.usuario?.cpf_usu}</p>
-                  <p><strong>Período:</strong> {new Date(dataInicio).toLocaleDateString()} a {new Date(dataFim).toLocaleDateString()}</p>
-                </div>
-
-                <div>
-                  <h3 className="text-xl font-semibold mb-4">Orçamentos Criados</h3>
-                  {reportData.orcamentos.length > 0 ? (
-                    <div className="space-y-2">
-                      <table className="w-full border-collapse border">
-                        <thead>
-                          <tr className="bg-muted">
-                            <th className="border p-2 text-left">Número</th>
-                            <th className="border p-2 text-left">Data</th>
-                            <th className="border p-2 text-left">Veículo</th>
-                            <th className="border p-2 text-right">Valor</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {reportData.orcamentos.map((orc: any) => (
-                            <tr key={orc.id_orc}>
-                              <td className="border p-2">{orc.numero_orc}</td>
-                              <td className="border p-2">{new Date(orc.data_abertura).toLocaleDateString()}</td>
-                              <td className="border p-2">{orc.veiculo?.placa_veic}</td>
-                              <td className="border p-2 text-right">R$ {Number(orc.valor_total).toFixed(2)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="bg-muted font-semibold">
-                            <td colSpan={3} className="border p-2 text-right">Total:</td>
-                            <td className="border p-2 text-right">R$ {calcularTotalOrcamentos().toFixed(2)}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground">Nenhum orçamento no período</p>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="text-xl font-semibold mb-4">Ordens de Serviço</h3>
-                  {reportData.ordens.length > 0 ? (
-                    <div className="space-y-2">
-                      <table className="w-full border-collapse border">
-                        <thead>
-                          <tr className="bg-muted">
-                            <th className="border p-2 text-left">Número</th>
-                            <th className="border p-2 text-left">Data</th>
-                            <th className="border p-2 text-left">Veículo</th>
-                            <th className="border p-2 text-left">Status</th>
-                            <th className="border p-2 text-right">Valor</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {reportData.ordens.map((os: any) => (
-                            <tr key={os.id_os}>
-                              <td className="border p-2">{os.numero_os}</td>
-                              <td className="border p-2">{new Date(os.data_abertura).toLocaleDateString()}</td>
-                              <td className="border p-2">{os.veiculo?.placa_veic}</td>
-                              <td className="border p-2">{os.status}</td>
-                              <td className="border p-2 text-right">R$ {Number(os.valor_total).toFixed(2)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="bg-muted font-semibold">
-                            <td colSpan={4} className="border p-2 text-right">Total:</td>
-                            <td className="border p-2 text-right">R$ {calcularTotalOS().toFixed(2)}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground">Nenhuma OS no período</p>
-                  )}
-                </div>
-
-                <div className="border-t pt-4">
-                  <p className="text-right text-xl font-bold">
-                    Total Geral: R$ {(calcularTotalOrcamentos() + calcularTotalOS()).toFixed(2)}
-                  </p>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowPdfDialog(false)}>Cancelar</Button>
-                <Button onClick={handlePrint}>Imprimir</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
           <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -449,6 +477,53 @@ export default function Relatorio() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Dialog de confirmação de impressão */}
+          <AlertDialog open={showPrintConfirmDialog} onOpenChange={setShowPrintConfirmDialog}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Imprimir Relatório</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {historicoToPrint && (
+                    <div className="space-y-2 mt-4">
+                      <p><strong>Usuário:</strong> {historicoToPrint.nome_usuario_consultado}</p>
+                      <p><strong>Período:</strong> {formatarData(historicoToPrint.data_inicio)} até {formatarData(historicoToPrint.data_fim)}</p>
+                      <p><strong>Total de Orçamentos:</strong> {historicoToPrint.total_orcamentos} ({formatarValor(historicoToPrint.valor_total_orcamentos)})</p>
+                      <p><strong>Total de OS:</strong> {historicoToPrint.total_os} ({formatarValor(historicoToPrint.valor_total_os)})</p>
+                      <p className="font-bold text-lg mt-2"><strong>Valor Total:</strong> {formatarValor(historicoToPrint.valor_total_geral)}</p>
+                    </div>
+                  )}
+                  <p className="mt-4">Deseja visualizar a pré-visualização do relatório?</p>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleVisualizarImpressao}>Visualizar Impressão</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Dialog de pré-visualização de impressão */}
+          <RelatorioPDFPreviewDialog
+            open={showPrintPreviewDialog}
+            onClose={() => setShowPrintPreviewDialog(false)}
+            onPrint={handlePrintRelatorio}
+            printData={printData}
+            isGenerating={isGeneratingPDF}
+          />
+
+          {/* Template de impressão oculto */}
+          <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+            {printData && (
+              <RelatorioPrintTemplate
+                ref={printRef}
+                usuario={printData.usuario}
+                dataInicio={printData.dataInicio}
+                dataFim={printData.dataFim}
+                movimentacoes={printData.movimentacoes}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

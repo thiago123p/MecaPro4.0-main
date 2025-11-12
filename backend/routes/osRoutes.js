@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { registrarMovimentacao } = require('./logMovimentacoesRoutes');
 
 router.get('/', async (req, res) => {
   try {
@@ -162,6 +163,20 @@ router.post('/', async (req, res) => {
     );
     console.log('OS criada com sucesso:', result.rows[0]);
     console.log('Observação salva:', observacaoValue);
+    
+    // Registrar movimentação
+    if (usuarioId) {
+      await registrarMovimentacao(
+        usuarioId,
+        'os',
+        'criar',
+        result.rows[0].id_os,
+        result.rows[0].numero_os,
+        result.rows[0].valor_total,
+        'OS criada'
+      );
+    }
+    
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Erro ao criar OS:', error);
@@ -265,6 +280,20 @@ router.put('/:id', async (req, res) => {
     }
 
     console.log('OS atualizada com sucesso:', result.rows[0]);
+    
+    // Registrar movimentação
+    if (result.rows[0].id_usu) {
+      await registrarMovimentacao(
+        result.rows[0].id_usu,
+        'os',
+        'editar',
+        result.rows[0].id_os,
+        result.rows[0].numero_os,
+        result.rows[0].valor_total,
+        'OS editada'
+      );
+    }
+    
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Erro ao atualizar OS:', error);
@@ -341,6 +370,22 @@ router.put('/:id/finalizar', async (req, res) => {
     await client.query('COMMIT');
 
     console.log('OS finalizada com sucesso e estoque atualizado:', result.rows[0]);
+    
+    // Registrar movimentação de encerramento
+    // Buscar o usuário logado que está encerrando (deve vir no body ou ser o mesmo que criou)
+    const usuarioEncerramento = req.body.id_usuario_encerramento || result.rows[0].id_usu;
+    if (usuarioEncerramento) {
+      await registrarMovimentacao(
+        usuarioEncerramento,
+        'os',
+        'encerrar',
+        result.rows[0].id_os,
+        result.rows[0].numero_os,
+        result.rows[0].valor_total,
+        `OS encerrada - Pagamento: ${forma_pagamento}`
+      );
+    }
+    
     res.json(result.rows[0]);
   } catch (error) {
     // Rollback em caso de erro

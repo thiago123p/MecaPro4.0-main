@@ -13,6 +13,7 @@ const usuarioRoutes = require('./routes/usuarioRoutes');
 const osRoutes = require('./routes/osRoutes');
 const orcamentoRoutes = require('./routes/orcamentoRoutes');
 const historicoRelatorioRoutes = require('./routes/historicoRelatorioRoutes');
+const logMovimentacoesRoutes = require('./routes/logMovimentacoesRoutes');
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/os', osRoutes);
 app.use('/api/orcamentos', orcamentoRoutes);
 app.use('/api/historico-relatorio', historicoRelatorioRoutes);
+app.use('/api/log-movimentacoes', logMovimentacoesRoutes);
 
 // Rota de health check
 app.get('/health', (req, res) => {

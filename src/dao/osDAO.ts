@@ -66,9 +66,13 @@ export const osDAO = {
   },
 
   async finalizar(idOS: string, formaPagamento: string): Promise<void> {
+    const userId = localStorage.getItem("userId");
     await apiRequest(`/os/${idOS}/finalizar`, {
-      method: 'PUT',
-      body: JSON.stringify({ forma_pagamento: formaPagamento }),
+      method: "PUT",
+      body: JSON.stringify({ 
+        forma_pagamento: formaPagamento,
+        id_usuario_encerramento: userId
+      }),
     });
   },
 
