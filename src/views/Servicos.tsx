@@ -1,5 +1,5 @@
 import { Sidebar } from "@/components/layout/Sidebar";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,8 @@ import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { servicoService } from "@/controllers/servicoService";
 import { Servico } from "@/models/types";
 import { toast } from "sonner";
+import { useEnterKey } from "@/hooks/use-enter-key";
+import { useAddShortcut } from "@/hooks/use-add-shortcut";
 
 export default function ServicosPage() {
   const [servicos, setServicos] = useState<Servico[]>([]);
@@ -35,6 +37,38 @@ export default function ServicosPage() {
   useEffect(() => {
     carregarServicos();
   }, []);
+
+  // Ouvir evento de quick access
+  useEffect(() => {
+    const handleQuickAccess = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.type === 'servico') {
+        setShowDialog(true);
+      }
+    };
+
+    window.addEventListener('quick-access-open', handleQuickAccess);
+    return () => window.removeEventListener('quick-access-open', handleQuickAccess);
+  }, []);
+
+  // Hook para o botão Enter nos dialogs
+  const handleEnterKey = useCallback(() => {
+    if (showDialog) {
+      handleSave();
+    } else if (showDeleteDialog) {
+      handleDelete();
+    }
+  }, [showDialog, showDeleteDialog]);
+
+  useEnterKey({
+    onEnter: handleEnterKey,
+    enabled: showDialog || showDeleteDialog,
+  });
+
+  // Hook para Ctrl + (+) abrir diálogo de cadastro
+  useAddShortcut(() => {
+    setShowDialog(true);
+  });
 
   const carregarServicos = async () => {
     setIsLoading(true);

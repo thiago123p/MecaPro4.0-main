@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -17,6 +17,8 @@ import { RelatorioPDFPreviewDialog } from "@/components/RelatorioPDFPreviewDialo
 import { RelatorioPrintTemplate } from "@/components/RelatorioPrintTemplate";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { useEnterKey } from "@/hooks/use-enter-key";
+import { useAddShortcut } from "@/hooks/use-add-shortcut";
 
 export default function Relatorio() {
   const [showSearchDialog, setShowSearchDialog] = useState(false);
@@ -46,6 +48,38 @@ export default function Relatorio() {
     loadHistorico();
     setMaxDates();
   }, []);
+
+  // Ouvir evento de quick access
+  useEffect(() => {
+    const handleQuickAccess = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.type === 'relatorio') {
+        setShowSearchDialog(true);
+      }
+    };
+
+    window.addEventListener('quick-access-open', handleQuickAccess);
+    return () => window.removeEventListener('quick-access-open', handleQuickAccess);
+  }, []);
+
+  // Hook para o botão Enter nos dialogs
+  const handleEnterKey = useCallback(() => {
+    if (showSearchDialog) {
+      handleGerarRelatorio();
+    } else if (showDeleteDialog) {
+      confirmDeleteHistorico();
+    }
+  }, [showSearchDialog, showDeleteDialog]);
+
+  useEnterKey({
+    onEnter: handleEnterKey,
+    enabled: showSearchDialog || showDeleteDialog,
+  });
+
+  // Hook para Ctrl + (+) abrir diálogo de busca/cadastro
+  useAddShortcut(() => {
+    setShowSearchDialog(true);
+  });
 
   const setMaxDates = () => {
     const hoje = new Date();

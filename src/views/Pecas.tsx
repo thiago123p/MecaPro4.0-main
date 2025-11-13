@@ -1,5 +1,5 @@
 import { Sidebar } from "@/components/layout/Sidebar";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,8 @@ import { marcaService } from "@/controllers/marcaService";
 import { estoqueService } from "@/controllers/estoqueService";
 import { Peca, Marca, ControleEstoque } from "@/models/types";
 import { toast } from "sonner";
+import { useEnterKey } from "@/hooks/use-enter-key";
+import { useAddShortcut } from "@/hooks/use-add-shortcut";
 
 export default function PecasPage() {
   const [pecas, setPecas] = useState<Peca[]>([]);
@@ -42,6 +44,60 @@ export default function PecasPage() {
 
   useEffect(() => {
     carregarDados();
+  }, []);
+
+  // Ouvir evento de quick access
+  useEffect(() => {
+    const handleQuickAccess = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.type === 'peca') {
+        setShowDialog(true);
+      }
+    };
+
+    window.addEventListener('quick-access-open', handleQuickAccess);
+    return () => window.removeEventListener('quick-access-open', handleQuickAccess);
+  }, []);
+
+  // Hook para o botão Enter nos dialogs
+  const handleEnterKey = useCallback(() => {
+    if (showDialog) {
+      handleSave();
+    } else if (showDeleteDialog) {
+      handleDelete();
+    } else if (showEstoqueRegisterDialog) {
+      handleRegistrarEstoque();
+    }
+  }, [showDialog, showDeleteDialog, showEstoqueRegisterDialog]);
+
+  useEnterKey({
+    onEnter: handleEnterKey,
+    enabled: showDialog || showDeleteDialog,
+  });
+
+  // Hook para Ctrl + (+) abrir diálogo de cadastro
+  useAddShortcut(() => {
+    setShowDialog(true);
+  });
+
+  // Hook para Shift + Ctrl + C abrir diálogo de controle de estoque (específico da tela de Peças)
+  useEffect(() => {
+    const handleEstoqueShortcut = (event: KeyboardEvent) => {
+      // Detecta Shift + Ctrl + C
+      if (event.shiftKey && event.ctrlKey && event.key.toLowerCase() === 'c') {
+        // Verifica se não está em um input/textarea
+        const target = event.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+          return;
+        }
+        
+        event.preventDefault();
+        setShowEstoqueDialog(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleEstoqueShortcut);
+    return () => window.removeEventListener('keydown', handleEstoqueShortcut);
   }, []);
 
   const carregarDados = async () => {

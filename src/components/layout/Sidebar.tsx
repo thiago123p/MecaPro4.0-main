@@ -1,15 +1,25 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Settings, LogOut, Users, Wrench, User, Car, Package, Database, ShoppingCart, FileText, ClipboardList, BarChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const userType = localStorage.getItem("userType");
+  const userName = localStorage.getItem("userName");
 
   const handleSair = () => {
-    // Redireciona para a tela de dashboard
-    navigate("/dashboard");
+    // Limpa os dados do localStorage
+    localStorage.removeItem("userType");
+    localStorage.removeItem("userId");
+    localStorage.removeItem("userName");
+    
+    // Mostra mensagem de sucesso
+    toast.success("Logout realizado com sucesso!");
+    
+    // Redireciona para a tela de login
+    navigate("/");
   };
 
   const menuItems = [
@@ -57,7 +67,13 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-primary-foreground/20">
+      <div className="p-4 border-t border-primary-foreground/20 space-y-2">
+        {userName && (
+          <div className="px-2 py-1 text-sm text-primary-foreground/80">
+            <p className="font-medium truncate">{userName}</p>
+            <p className="text-xs capitalize">{userType}</p>
+          </div>
+        )}
         <Button
           onClick={handleSair}
           variant="ghost"

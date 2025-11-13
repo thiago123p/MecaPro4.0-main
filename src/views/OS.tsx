@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,8 @@ import { OSPrintTemplate } from "@/components/OSPrintTemplate";
 import { PDFPreviewDialog } from "@/components/PDFPreviewDialog";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { useEnterKey } from "@/hooks/use-enter-key";
+import { useAddShortcut } from "@/hooks/use-add-shortcut";
 
 interface OSItem {
   tipo: "peca" | "servico";
@@ -71,6 +73,38 @@ export default function OS() {
     loadVeiculos();
     loadMecanicos();
   }, []);
+
+  // Ouvir evento de quick access
+  useEffect(() => {
+    const handleQuickAccess = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.type === 'os') {
+        setShowAddDialog(true);
+      }
+    };
+
+    window.addEventListener('quick-access-open', handleQuickAccess);
+    return () => window.removeEventListener('quick-access-open', handleQuickAccess);
+  }, []);
+
+  // Hook para o botão Enter nos dialogs
+  const handleEnterKey = useCallback(() => {
+    if (showAddDialog) {
+      handleSave();
+    } else if (showDeleteDialog) {
+      handleDelete();
+    }
+  }, [showAddDialog, showDeleteDialog]);
+
+  useEnterKey({
+    onEnter: handleEnterKey,
+    enabled: showAddDialog || showDeleteDialog,
+  });
+
+  // Hook para Ctrl + (+) abrir diálogo de cadastro
+  useAddShortcut(() => {
+    setShowAddDialog(true);
+  });
 
   // Debug: monitorar mudanças na observação
   useEffect(() => {

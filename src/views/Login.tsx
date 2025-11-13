@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { Settings, Eye, EyeOff } from "lucide-react";
 import { usuarioService } from "@/controllers/usuarioService";
+import { useEnterKey } from "@/hooks/use-enter-key";
 
 export default function Login() {
   const [login, setLogin] = useState("");
@@ -23,7 +24,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = async () => {
+  const handleLogin = useCallback(async () => {
     if (!login || !senha) {
       toast.error("Preencha todos os campos");
       return;
@@ -53,14 +54,9 @@ export default function Login() {
       console.error('Erro no login:', error);
       toast.error(error.message || "CPF ou senha incorretos");
     }
-  };
+  }, [login, senha, navigate]);
 
-  const handleCancelar = () => {
-    setLogin("");
-    setSenha("");
-  };
-
-  const handleRecuperarSenha = async () => {
+  const handleRecuperarSenha = useCallback(async () => {
     if (!loginRecuperacao) {
       toast.error("Digite o login");
       return;
@@ -77,6 +73,23 @@ export default function Login() {
     } catch (error) {
       toast.error("Erro ao buscar palavra-chave");
     }
+  }, [loginRecuperacao]);
+
+  // Hook para Enter fazer login
+  useEnterKey({
+    onEnter: handleLogin,
+    enabled: !showRecuperacao, // Só ativa quando não está no diálogo de recuperação
+  });
+
+  // Hook para Enter no diálogo de recuperação
+  useEnterKey({
+    onEnter: handleRecuperarSenha,
+    enabled: showRecuperacao, // Só ativa quando está no diálogo de recuperação
+  });
+
+  const handleCancelar = () => {
+    setLogin("");
+    setSenha("");
   };
 
   return (
@@ -107,6 +120,7 @@ export default function Login() {
               onChange={(e) => setLogin(e.target.value)}
               className="bg-background"
               placeholder="Digite seu nome ou CPF"
+              autoFocus
             />
           </div>
 
@@ -122,7 +136,6 @@ export default function Login() {
                 onChange={(e) => setSenha(e.target.value)}
                 className="bg-background pr-10"
                 placeholder="••••••••"
-                onKeyPress={(e) => e.key === "Enter" && handleLogin()}
               />
               <Button
                 type="button"

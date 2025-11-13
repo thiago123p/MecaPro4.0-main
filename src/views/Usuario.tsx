@@ -1,5 +1,5 @@
 import { Sidebar } from "@/components/layout/Sidebar";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,8 @@ import { usuarioService } from "@/controllers/usuarioService";
 import { Usuario } from "@/models/types";
 import { toast } from "sonner";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { useEnterKey } from "@/hooks/use-enter-key";
+import { useAddShortcut } from "@/hooks/use-add-shortcut";
 
 export default function UsuarioPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -35,6 +37,38 @@ export default function UsuarioPage() {
   useEffect(() => {
     carregarUsuarios();
   }, []);
+
+  // Ouvir evento de quick access
+  useEffect(() => {
+    const handleQuickAccess = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.type === 'usuario') {
+        setShowDialog(true);
+      }
+    };
+
+    window.addEventListener('quick-access-open', handleQuickAccess);
+    return () => window.removeEventListener('quick-access-open', handleQuickAccess);
+  }, []);
+
+  // Hook para o botão Enter nos dialogs
+  const handleEnterKey = useCallback(() => {
+    if (showDialog) {
+      handleSave();
+    } else if (showDeleteDialog) {
+      handleDelete();
+    }
+  }, [showDialog, showDeleteDialog]);
+
+  useEnterKey({
+    onEnter: handleEnterKey,
+    enabled: showDialog || showDeleteDialog,
+  });
+
+  // Hook para Ctrl + (+) abrir diálogo de cadastro
+  useAddShortcut(() => {
+    setShowDialog(true);
+  });
 
   const carregarUsuarios = async () => {
     try {

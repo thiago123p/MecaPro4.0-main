@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,8 @@ import { OrcamentoPDFPreviewDialog } from "@/components/OrcamentoPDFPreviewDialo
 import { OrcamentoPrintTemplate } from "@/components/OrcamentoPrintTemplate";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { useEnterKey } from "@/hooks/use-enter-key";
+import { useAddShortcut } from "@/hooks/use-add-shortcut";
 
 interface OrcamentoItem {
   tipo: "peca" | "servico";
@@ -58,6 +60,38 @@ export default function Orcamento() {
     loadServicos();
     loadVeiculos();
   }, []);
+
+  // Ouvir evento de quick access
+  useEffect(() => {
+    const handleQuickAccess = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.type === 'orcamento') {
+        setShowAddDialog(true);
+      }
+    };
+
+    window.addEventListener('quick-access-open', handleQuickAccess);
+    return () => window.removeEventListener('quick-access-open', handleQuickAccess);
+  }, []);
+
+  // Hook para o botão Enter nos dialogs
+  const handleEnterKey = useCallback(() => {
+    if (showAddDialog) {
+      handleSave();
+    } else if (showDeleteDialog) {
+      handleDelete();
+    }
+  }, [showAddDialog, showDeleteDialog]);
+
+  useEnterKey({
+    onEnter: handleEnterKey,
+    enabled: showAddDialog || showDeleteDialog,
+  });
+
+  // Hook para Ctrl + (+) abrir diálogo de cadastro
+  useAddShortcut(() => {
+    setShowAddDialog(true);
+  });
 
   const loadOrcamentos = async () => {
     try {
