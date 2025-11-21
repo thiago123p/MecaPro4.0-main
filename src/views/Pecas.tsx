@@ -29,6 +29,7 @@ export default function PecasPage() {
   const [filterEstoque, setFilterEstoque] = useState("");
   const [pecaSelecionada, setPecaSelecionada] = useState<Peca | null>(null);
   const [movimentacoes, setMovimentacoes] = useState<ControleEstoque[]>([]);
+  const [resumoEstoque, setResumoEstoque] = useState<any[]>([]);
   const [quantidade, setQuantidade] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -228,6 +229,15 @@ export default function PecasPage() {
       }
     } catch (error) {
       toast.error("Erro ao buscar peça");
+    }
+  };
+
+  const carregarResumoEstoque = async () => {
+    try {
+      const resumo = await estoqueService.getResumo();
+      setResumoEstoque(resumo);
+    } catch (error) {
+      toast.error("Erro ao carregar resumo de estoque");
     }
   };
 
@@ -487,12 +497,15 @@ export default function PecasPage() {
 
       <Dialog open={showEstoqueDialog} onOpenChange={(open) => {
         setShowEstoqueDialog(open);
+        if (open) {
+          carregarResumoEstoque();
+        }
         if (!open) {
           setSearchEstoque("");
           setFilterEstoque("");
         }
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Controle de Estoque</DialogTitle>
           </DialogHeader>
@@ -593,6 +606,42 @@ export default function PecasPage() {
               <p className="text-xs text-muted-foreground mt-1">
                 Digite para pesquisar, selecione uma peça e pressione Enter ou clique em "Abrir"
               </p>
+            </div>
+
+            <div className="mt-6">
+              <h3 className="font-semibold mb-2">Peças em Estoque</h3>
+              <div className="bg-card rounded-lg border max-h-80 overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead className="text-right">Quantidade</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resumoEstoque.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                          Nenhuma peça em estoque
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      resumoEstoque.map((item) => (
+                        <TableRow key={item.id_peca}>
+                          <TableCell>{item.codigo_peca}</TableCell>
+                          <TableCell>{item.descricao_peca}</TableCell>
+                          <TableCell className="text-right">
+                            <span className={item.quantidade <= 0 ? "text-red-500 font-semibold" : ""}>
+                              {item.quantidade}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </div>
         </DialogContent>

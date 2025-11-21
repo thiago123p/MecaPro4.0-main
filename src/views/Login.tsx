@@ -192,6 +192,14 @@ export default function Login() {
                 <p className="text-lg">{palavraChave}</p>
               </div>
             )}
+            
+            {/* Aviso sobre contato com administrador */}
+            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                <strong>⚠️ Atenção:</strong> Caso não seja possível recuperar a senha pela palavra-chave, entre em contato com o administrador do sistema.
+              </p>
+            </div>
+            
             <div className="flex gap-2">
               <Button onClick={handleRecuperarSenha} className="flex-1">
                 Buscar

@@ -52,8 +52,8 @@ export const osService = {
     return osDAO.removerServico(idOS, idServ);
   },
 
-  async finalizar(idOS: string, formaPagamento: string): Promise<void> {
-    return osDAO.finalizar(idOS, formaPagamento);
+  async finalizar(idOS: string, formaPagamento: string, descontoPecas: number = 0, descontoServicos: number = 0): Promise<void> {
+    return osDAO.finalizar(idOS, formaPagamento, descontoPecas, descontoServicos);
   },
 
   async delete(id: string): Promise<void> {

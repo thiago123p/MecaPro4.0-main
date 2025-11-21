@@ -306,7 +306,7 @@ router.put('/:id/finalizar', async (req, res) => {
   
   try {
     const { id } = req.params;
-    const { forma_pagamento } = req.body;
+    const { forma_pagamento, desconto_pecas = 0, desconto_servicos = 0 } = req.body;
     
     // Validação dos campos obrigatórios
     if (!id) {
@@ -314,6 +314,14 @@ router.put('/:id/finalizar', async (req, res) => {
     }
     if (!forma_pagamento) {
       return res.status(400).json({ error: 'Forma de pagamento é obrigatória' });
+    }
+
+    // Validar descontos
+    if (desconto_pecas < 0 || desconto_pecas > 15) {
+      return res.status(400).json({ error: 'Desconto de peças deve estar entre 0% e 15%' });
+    }
+    if (desconto_servicos < 0 || desconto_servicos > 15) {
+      return res.status(400).json({ error: 'Desconto de serviços deve estar entre 0% e 15%' });
     }
 
     // Iniciar transação
@@ -324,6 +332,39 @@ router.put('/:id/finalizar', async (req, res) => {
       'SELECT id_peca, quantidade FROM os_pecas WHERE id_os = $1',
       [id]
     );
+
+    // Calcular valores de peças e serviços
+    const pecasComPreco = await client.query(
+      `SELECT op.quantidade, p.preco_peca 
+       FROM os_pecas op 
+       JOIN pecas p ON op.id_peca = p.id_peca 
+       WHERE op.id_os = $1`,
+      [id]
+    );
+
+    const servicosComPreco = await client.query(
+      `SELECT os.quantidade, s.valor_final_serv 
+       FROM os_servicos os 
+       JOIN servicos s ON os.id_serv = s.id_serv 
+       WHERE os.id_os = $1`,
+      [id]
+    );
+
+    // Calcular totais
+    let totalPecas = 0;
+    pecasComPreco.rows.forEach(item => {
+      totalPecas += item.quantidade * item.preco_peca;
+    });
+
+    let totalServicos = 0;
+    servicosComPreco.rows.forEach(item => {
+      totalServicos += item.quantidade * item.valor_final_serv;
+    });
+
+    // Calcular descontos em valores
+    const valorDescontoPecas = (totalPecas * desconto_pecas) / 100;
+    const valorDescontoServicos = (totalServicos * desconto_servicos) / 100;
+    const valorFinal = (totalPecas + totalServicos) - valorDescontoPecas - valorDescontoServicos;
 
     // Para cada peça, decrementar do estoque
     for (const item of pecasOS.rows) {
@@ -351,14 +392,19 @@ router.put('/:id/finalizar', async (req, res) => {
       }
     }
 
-    // Finalizar a OS
+    // Finalizar a OS com os valores de desconto
     const result = await client.query(
       `UPDATE os 
        SET status = 'encerrada', 
            data_encerramento = CURRENT_TIMESTAMP, 
-           forma_pagamento = $1
-       WHERE id_os = $2 RETURNING *`,
-      [forma_pagamento, id]
+           forma_pagamento = $1,
+           desconto_pecas = $2,
+           desconto_servicos = $3,
+           valor_desconto_pecas = $4,
+           valor_desconto_servicos = $5,
+           valor_final = $6
+       WHERE id_os = $7 RETURNING *`,
+      [forma_pagamento, desconto_pecas, desconto_servicos, valorDescontoPecas, valorDescontoServicos, valorFinal, id]
     );
 
     if (result.rows.length === 0) {
@@ -370,6 +416,8 @@ router.put('/:id/finalizar', async (req, res) => {
     await client.query('COMMIT');
 
     console.log('OS finalizada com sucesso e estoque atualizado:', result.rows[0]);
+    console.log('Descontos aplicados - Peças:', desconto_pecas, '% | Serviços:', desconto_servicos, '%');
+    console.log('Valor final após descontos: R$', valorFinal.toFixed(2));
     
     // Registrar movimentação de encerramento
     // Buscar o usuário logado que está encerrando (deve vir no body ou ser o mesmo que criou)
@@ -448,6 +496,8 @@ router.delete('/:id/servicos/:idServ', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+  const client = await pool.connect();
+  
   try {
     const { id } = req.params;
     
@@ -456,21 +506,66 @@ router.delete('/:id', async (req, res) => {
       return res.status(400).json({ error: 'ID da OS é obrigatório' });
     }
 
-    // Primeiro, verificamos se existem registros relacionados
-    const pecasResult = await pool.query('DELETE FROM os_pecas WHERE id_os = $1', [id]);
-    const servicosResult = await pool.query('DELETE FROM os_servicos WHERE id_os = $1', [id]);
+    // Iniciar transação
+    await client.query('BEGIN');
 
-    // Depois, deletamos a OS
-    const result = await pool.query('DELETE FROM os WHERE id_os = $1 RETURNING *', [id]);
-
-    if (result.rows.length === 0) {
+    // Verificar se a OS está encerrada (se estiver, devolver peças ao estoque)
+    const osResult = await client.query('SELECT status FROM os WHERE id_os = $1', [id]);
+    
+    if (osResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'OS não encontrada' });
     }
+
+    const osStatus = osResult.rows[0].status;
+
+    // Se a OS estiver encerrada, devolver as peças ao estoque
+    if (osStatus === 'encerrada') {
+      const pecasOS = await client.query(
+        'SELECT id_peca, quantidade FROM os_pecas WHERE id_os = $1',
+        [id]
+      );
+
+      // Para cada peça, devolver ao estoque
+      for (const item of pecasOS.rows) {
+        const estoqueAtual = await client.query(
+          'SELECT quantidade FROM controle_estoque WHERE id_peca = $1',
+          [item.id_peca]
+        );
+
+        if (estoqueAtual.rows.length > 0) {
+          const quantidadeAtual = estoqueAtual.rows[0].quantidade;
+          const novaQuantidade = quantidadeAtual + item.quantidade;
+
+          await client.query(
+            'UPDATE controle_estoque SET quantidade = $1, data_registro = NOW() WHERE id_peca = $2',
+            [novaQuantidade, item.id_peca]
+          );
+        } else {
+          // Se não existe estoque, criar com a quantidade devolvida
+          await client.query(
+            'INSERT INTO controle_estoque (id_peca, quantidade) VALUES ($1, $2)',
+            [item.id_peca, item.quantidade]
+          );
+        }
+      }
+    }
+
+    // Deletar registros relacionados
+    const pecasResult = await client.query('DELETE FROM os_pecas WHERE id_os = $1', [id]);
+    const servicosResult = await client.query('DELETE FROM os_servicos WHERE id_os = $1', [id]);
+
+    // Deletar a OS
+    const result = await client.query('DELETE FROM os WHERE id_os = $1 RETURNING *', [id]);
+
+    // Commit da transação
+    await client.query('COMMIT');
 
     console.log('OS e registros relacionados deletados com sucesso:', {
       os: result.rows[0],
       pecasDeletadas: pecasResult.rowCount,
-      servicosDeletados: servicosResult.rowCount
+      servicosDeletados: servicosResult.rowCount,
+      pecasDevolvidas: osStatus === 'encerrada'
     });
     
     res.json({ 
@@ -479,8 +574,12 @@ router.delete('/:id', async (req, res) => {
       servicosDeletados: servicosResult.rowCount
     });
   } catch (error) {
+    // Rollback em caso de erro
+    await client.query('ROLLBACK');
     console.error('Erro ao deletar OS:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 

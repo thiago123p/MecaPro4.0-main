@@ -65,13 +65,15 @@ export const osDAO = {
     await apiRequest(`/os/${idOS}/servicos/${idServ}`, { method: 'DELETE' });
   },
 
-  async finalizar(idOS: string, formaPagamento: string): Promise<void> {
+  async finalizar(idOS: string, formaPagamento: string, descontoPecas: number = 0, descontoServicos: number = 0): Promise<void> {
     const userId = localStorage.getItem("userId");
     await apiRequest(`/os/${idOS}/finalizar`, {
       method: "PUT",
       body: JSON.stringify({ 
         forma_pagamento: formaPagamento,
-        id_usuario_encerramento: userId
+        id_usuario_encerramento: userId,
+        desconto_pecas: descontoPecas,
+        desconto_servicos: descontoServicos
       }),
     });
   },

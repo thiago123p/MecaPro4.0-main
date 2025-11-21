@@ -64,6 +64,16 @@ export default function OS() {
   const [parcelasCartao, setParcelasCartao] = useState("");
   const [observacao, setObservacao] = useState("");
   const [items, setItems] = useState<OSItem[]>([]);
+  const [descontoPecas, setDescontoPecas] = useState("0");
+  const [descontoServicos, setDescontoServicos] = useState("0");
+  const [valoresCalculados, setValoresCalculados] = useState({
+    totalPecas: 0,
+    totalServicos: 0,
+    totalGeral: 0,
+    descontoPecasValor: 0,
+    descontoServicosValor: 0,
+    totalComDesconto: 0
+  });
 
   useEffect(() => {
     loadOrdens();
@@ -273,6 +283,20 @@ export default function OS() {
       }
     }
 
+    // Validar descontos
+    const descPecas = parseFloat(descontoPecas) || 0;
+    const descServicos = parseFloat(descontoServicos) || 0;
+
+    if (descPecas < 0 || descPecas > 15) {
+      toast.error("Desconto de peças deve estar entre 0% e 15%");
+      return;
+    }
+
+    if (descServicos < 0 || descServicos > 15) {
+      toast.error("Desconto de serviços deve estar entre 0% e 15%");
+      return;
+    }
+
     try {
       // Montar descrição completa do pagamento
       let formaPagamentoCompleta = selectedPagamento;
@@ -283,12 +307,14 @@ export default function OS() {
         }
       }
 
-      await osService.finalizar(selectedOS.id_os, formaPagamentoCompleta);
+      await osService.finalizar(selectedOS.id_os, formaPagamentoCompleta, descPecas, descServicos);
       setShowPagamentoDialog(false);
       setShowFinalizarDialog(false);
       setSelectedPagamento("");
       setTipoCartao("");
       setParcelasCartao("");
+      setDescontoPecas("0");
+      setDescontoServicos("0");
       loadOrdens();
       
       // Após encerrar, abrir preview para impressão
@@ -300,6 +326,61 @@ export default function OS() {
       await handleOpenPreview(osEncerrada);
     } catch (error) {
       toast.error("Erro ao finalizar OS");
+    }
+  };
+
+  const calcularValoresComDesconto = async () => {
+    if (!selectedOS) return { totalPecas: 0, totalServicos: 0, totalGeral: 0, descontoPecasValor: 0, descontoServicosValor: 0, totalComDesconto: 0 };
+
+    const descPecas = parseFloat(descontoPecas) || 0;
+    const descServicos = parseFloat(descontoServicos) || 0;
+
+    try {
+      // Buscar peças e serviços da OS
+      const pecasOS = await osService.getPecas(selectedOS.id_os);
+      const servicosOS = await osService.getServicos(selectedOS.id_os);
+
+      // Calcular total de peças
+      let totalPecas = 0;
+      pecasOS.forEach((item: any) => {
+        totalPecas += item.quantidade * item.preco_peca;
+      });
+
+      // Calcular total de serviços
+      let totalServicos = 0;
+      servicosOS.forEach((item: any) => {
+        totalServicos += item.quantidade * item.valor_final_serv;
+      });
+
+      const descontoPecasValor = (totalPecas * descPecas) / 100;
+      const descontoServicosValor = (totalServicos * descServicos) / 100;
+      const totalComDesconto = (totalPecas + totalServicos) - descontoPecasValor - descontoServicosValor;
+
+      return {
+        totalPecas,
+        totalServicos,
+        totalGeral: totalPecas + totalServicos,
+        descontoPecasValor,
+        descontoServicosValor,
+        totalComDesconto
+      };
+    } catch (error) {
+      // Em caso de erro, usar o valor total da OS
+      const valorTotal = Number(selectedOS.valor_total || 0);
+      const totalPecas = valorTotal * 0.6;
+      const totalServicos = valorTotal * 0.4;
+      const descontoPecasValor = (totalPecas * descPecas) / 100;
+      const descontoServicosValor = (totalServicos * descServicos) / 100;
+      const totalComDesconto = valorTotal - descontoPecasValor - descontoServicosValor;
+
+      return {
+        totalPecas,
+        totalServicos,
+        totalGeral: valorTotal,
+        descontoPecasValor,
+        descontoServicosValor,
+        totalComDesconto
+      };
     }
   };
 
@@ -1075,20 +1156,99 @@ export default function OS() {
             </AlertDialogContent>
           </AlertDialog>
 
-          <Dialog open={showFinalizarDialog} onOpenChange={setShowFinalizarDialog}>
-            <DialogContent>
+          <Dialog open={showFinalizarDialog} onOpenChange={async (open) => {
+            setShowFinalizarDialog(open);
+            if (open) {
+              // Calcular valores ao abrir
+              const valores = await calcularValoresComDesconto();
+              setValoresCalculados(valores);
+            } else {
+              setDescontoPecas("0");
+              setDescontoServicos("0");
+            }
+          }}>
+            <DialogContent className="max-w-xl">
               <DialogHeader>
                 <DialogTitle>Finalizar OS</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                <p className="text-lg font-semibold">
-                  Valor Total: R$ {Number(selectedOS?.valor_total || 0).toFixed(2)}
-                </p>
+                <div className="p-4 bg-secondary rounded-lg space-y-3">
+                  <p className="text-lg font-semibold">
+                    Valor Total: R$ {valoresCalculados.totalGeral.toFixed(2)}
+                  </p>
+                  
+                  <div className="space-y-2 pt-2 border-t">
+                    <label className="text-sm font-medium">Desconto em Peças (máx. 15%)</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="15"
+                        step="0.1"
+                        value={descontoPecas}
+                        onChange={async (e) => {
+                          const value = parseFloat(e.target.value) || 0;
+                          if (value >= 0 && value <= 15) {
+                            setDescontoPecas(e.target.value);
+                            // Recalcular valores
+                            const valores = await calcularValoresComDesconto();
+                            setValoresCalculados(valores);
+                          }
+                        }}
+                        placeholder="0"
+                        className="w-24"
+                      />
+                      <span className="text-sm">%</span>
+                      <span className="text-sm text-muted-foreground ml-auto">
+                        - R$ {valoresCalculados.descontoPecasValor.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Desconto em Serviços (máx. 15%)</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="15"
+                        step="0.1"
+                        value={descontoServicos}
+                        onChange={async (e) => {
+                          const value = parseFloat(e.target.value) || 0;
+                          if (value >= 0 && value <= 15) {
+                            setDescontoServicos(e.target.value);
+                            // Recalcular valores
+                            const valores = await calcularValoresComDesconto();
+                            setValoresCalculados(valores);
+                          }
+                        }}
+                        placeholder="0"
+                        className="w-24"
+                      />
+                      <span className="text-sm">%</span>
+                      <span className="text-sm text-muted-foreground ml-auto">
+                        - R$ {valoresCalculados.descontoServicosValor.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {(parseFloat(descontoPecas) > 0 || parseFloat(descontoServicos) > 0) && (
+                    <div className="pt-2 border-t">
+                      <p className="text-xl font-bold text-green-600">
+                        Valor Final: R$ {valoresCalculados.totalComDesconto.toFixed(2)}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Economia total: R$ {(valoresCalculados.descontoPecasValor + valoresCalculados.descontoServicosValor).toFixed(2)}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowFinalizarDialog(false)}>Cancelar</Button>
                 <Button onClick={() => { setShowFinalizarDialog(false); setShowPagamentoDialog(true); }}>
-                  Finalizar
+                  Continuar
                 </Button>
               </DialogFooter>
             </DialogContent>

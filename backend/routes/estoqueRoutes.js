@@ -16,6 +16,26 @@ router.get('/', async (req, res) => {
   }
 });
 
+// IMPORTANTE: Rota /resumo DEVE vir ANTES de /peca/:idPeca
+// Nova rota para obter todas as peças com suas quantidades em estoque
+router.get('/resumo', async (req, res) => {
+  try {
+    console.log('Buscando resumo de estoque...');
+    const result = await pool.query(
+      `SELECT p.id_peca, p.descricao_peca, p.codigo_peca, p.preco_peca, 
+              COALESCE(e.quantidade, 0) as quantidade
+       FROM pecas p
+       LEFT JOIN controle_estoque e ON p.id_peca = e.id_peca
+       ORDER BY p.descricao_peca ASC`
+    );
+    console.log('Resumo de estoque recuperado:', result.rowCount, 'peças');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Erro ao buscar resumo de estoque:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/peca/:idPeca', async (req, res) => {
   try {
     const result = await pool.query(

@@ -7,6 +7,10 @@ export const estoqueDAO = {
     return apiRequest<ControleEstoque[]>('/estoque');
   },
 
+  async buscarResumo(): Promise<ControleEstoque[]> {
+    return apiRequest<ControleEstoque[]>('/estoque/resumo');
+  },
+
   async buscarPorPeca(idPeca: string): Promise<ControleEstoque | null> {
     try {
       return await apiRequest<ControleEstoque>(`/estoque/peca/${idPeca}`);

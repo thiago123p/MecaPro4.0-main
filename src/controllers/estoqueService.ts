@@ -7,6 +7,10 @@ export const estoqueService = {
     return estoqueDAO.buscarTodos();
   },
 
+  async getResumo(): Promise<ControleEstoque[]> {
+    return estoqueDAO.buscarResumo();
+  },
+
   async getByPecaId(idPeca: string): Promise<ControleEstoque | null> {
     return estoqueDAO.buscarPorPeca(idPeca);
   },

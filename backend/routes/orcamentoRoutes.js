@@ -235,26 +235,55 @@ router.delete('/:id/servicos/:idServ', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+  const client = await pool.connect();
+  
   try {
-    const result = await pool.query('DELETE FROM orcamento WHERE id_orc = $1 RETURNING *', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Orçamento não encontrado' });
+    const { id } = req.params;
+    
+    // Iniciar transação
+    await client.query('BEGIN');
+
+    // Buscar dados do orçamento antes de deletar
+    const orcResult = await client.query('SELECT * FROM orcamento WHERE id_orc = $1', [id]);
+    
+    if (orcResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Orçamento não encontrado' });
+    }
+
+    const orcamento = orcResult.rows[0];
+
+    // Deletar peças e serviços do orçamento (orçamentos não afetam estoque)
+    await client.query('DELETE FROM orcamento_pecas WHERE id_orc = $1', [id]);
+    await client.query('DELETE FROM orcamento_servicos WHERE id_orc = $1', [id]);
+
+    // Deletar o orçamento
+    await client.query('DELETE FROM orcamento WHERE id_orc = $1', [id]);
+
+    // Commit da transação
+    await client.query('COMMIT');
     
     // Registrar movimentação
-    if (result.rows[0].id_usu) {
+    if (orcamento.id_usu) {
       await registrarMovimentacao(
-        result.rows[0].id_usu,
+        orcamento.id_usu,
         'orcamento',
         'excluir',
-        result.rows[0].id_orc,
-        result.rows[0].numero_orc,
-        result.rows[0].valor_total,
+        orcamento.id_orc,
+        orcamento.numero_orc,
+        orcamento.valor_total,
         'Orçamento excluído'
       );
     }
     
     res.json({ message: 'Orçamento deletado com sucesso' });
   } catch (error) {
+    // Rollback em caso de erro
+    await client.query('ROLLBACK');
+    console.error('Erro ao deletar orçamento:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 

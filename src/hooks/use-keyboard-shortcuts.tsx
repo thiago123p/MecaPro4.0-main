@@ -25,53 +25,55 @@ export const useKeyboardShortcuts = () => {
         return;
       }
 
+      const key = event.key.toUpperCase();
+      
       // Shift + V = Veículo
-      if (event.shiftKey && !event.ctrlKey && event.key === 'V') {
+      if (event.shiftKey && !event.ctrlKey && key === 'V') {
         event.preventDefault();
         openDialog('veiculo');
       }
       // Shift + C = Cliente
-      else if (event.shiftKey && !event.ctrlKey && event.key === 'C') {
+      else if (event.shiftKey && !event.ctrlKey && key === 'C') {
         event.preventDefault();
         openDialog('cliente');
       }
       // Shift + U = Usuário
-      else if (event.shiftKey && !event.ctrlKey && event.key === 'U') {
+      else if (event.shiftKey && !event.ctrlKey && key === 'U') {
         event.preventDefault();
         openDialog('usuario');
       }
       // Shift + M = Mecânico (sem Ctrl)
-      else if (event.shiftKey && !event.ctrlKey && event.key === 'M') {
+      else if (event.shiftKey && !event.ctrlKey && key === 'M') {
         event.preventDefault();
         openDialog('mecanico');
       }
       // Shift + Ctrl + M = Marca
-      else if (event.shiftKey && event.ctrlKey && event.key === 'M') {
+      else if (event.shiftKey && event.ctrlKey && key === 'M') {
         event.preventDefault();
         openDialog('marca');
       }
       // Shift + R = Relatório
-      else if (event.shiftKey && !event.ctrlKey && event.key === 'R') {
+      else if (event.shiftKey && !event.ctrlKey && key === 'R') {
         event.preventDefault();
         openDialog('relatorio');
       }
       // Shift + O = Orçamento (sem Ctrl)
-      else if (event.shiftKey && !event.ctrlKey && event.key === 'O') {
+      else if (event.shiftKey && !event.ctrlKey && key === 'O') {
         event.preventDefault();
         openDialog('orcamento');
       }
       // Shift + Ctrl + O = OS
-      else if (event.shiftKey && event.ctrlKey && event.key === 'O') {
+      else if (event.shiftKey && event.ctrlKey && key === 'O') {
         event.preventDefault();
         openDialog('os');
       }
       // Shift + S = Serviços
-      else if (event.shiftKey && !event.ctrlKey && event.key === 'S') {
+      else if (event.shiftKey && !event.ctrlKey && key === 'S') {
         event.preventDefault();
         openDialog('servico');
       }
       // Shift + P = Peças
-      else if (event.shiftKey && !event.ctrlKey && event.key === 'P') {
+      else if (event.shiftKey && !event.ctrlKey && key === 'P') {
         event.preventDefault();
         openDialog('peca');
       }
