@@ -73,11 +73,14 @@ export interface Peca {
 }
 
 export interface ControleEstoque {
-  id_estoque: string;
+  id_estoque?: string;
   id_peca: string;
   quantidade: number;
-  data_registro: string;
+  data_registro?: string;
   peca?: Peca;
+  codigo_peca?: string;
+  descricao_peca?: string;
+  preco_peca?: number;
 }
 
 export interface Servico {

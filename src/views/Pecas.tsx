@@ -47,6 +47,12 @@ export default function PecasPage() {
     carregarDados();
   }, []);
 
+  // Debug: Monitorar mudanças no resumoEstoque
+  useEffect(() => {
+    console.log('🔄 Estado resumoEstoque atualizado:', resumoEstoque);
+    console.log('🔄 Quantidade de itens:', resumoEstoque?.length);
+  }, [resumoEstoque]);
+
   // Ouvir evento de quick access
   useEffect(() => {
     const handleQuickAccess = (event: Event) => {
@@ -234,10 +240,28 @@ export default function PecasPage() {
 
   const carregarResumoEstoque = async () => {
     try {
+      console.log('Iniciando carregamento do resumo de estoque...');
       const resumo = await estoqueService.getResumo();
-      setResumoEstoque(resumo);
+      console.log('Resumo carregado com sucesso:', resumo);
+      console.log('Quantidade de peças:', resumo?.length || 0);
+      
+      if (!resumo) {
+        console.warn('Resumo retornou null ou undefined');
+        setResumoEstoque([]);
+        return;
+      }
+      
+      if (Array.isArray(resumo)) {
+        console.log('Resumo é um array válido com', resumo.length, 'itens');
+        setResumoEstoque(resumo);
+      } else {
+        console.error('Resumo não é um array:', typeof resumo, resumo);
+        setResumoEstoque([]);
+      }
     } catch (error) {
+      console.error('Erro ao carregar resumo:', error);
       toast.error("Erro ao carregar resumo de estoque");
+      setResumoEstoque([]);
     }
   };
 
@@ -255,6 +279,16 @@ export default function PecasPage() {
     } catch (error) {
       toast.error("Erro ao registrar estoque");
     }
+  };
+
+  const handleAbrirEstoque = async () => {
+    console.log('🚀 Abrindo diálogo de controle de estoque...');
+    setResumoEstoque([]); // Limpa o estado anterior
+    setShowEstoqueDialog(true);
+    // Aguarda um pouco para o diálogo abrir
+    setTimeout(async () => {
+      await carregarResumoEstoque();
+    }, 100);
   };
 
   const calcularSaldo = () => {
@@ -293,7 +327,7 @@ export default function PecasPage() {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold">Peças</h1>
             <div className="flex gap-2">
-              <Button onClick={() => setShowEstoqueDialog(true)} variant="outline">
+              <Button onClick={handleAbrirEstoque} variant="outline">
                 <Package className="mr-2 h-4 w-4" />
                 Controle de Estoque
               </Button>
@@ -495,14 +529,17 @@ export default function PecasPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showEstoqueDialog} onOpenChange={(open) => {
+      <Dialog open={showEstoqueDialog} onOpenChange={async (open) => {
         setShowEstoqueDialog(open);
         if (open) {
-          carregarResumoEstoque();
+          console.log('🔓 Diálogo de estoque aberto, carregando resumo...');
+          await carregarResumoEstoque();
+          console.log('✅ Resumo carregado após abrir diálogo');
         }
         if (!open) {
           setSearchEstoque("");
           setFilterEstoque("");
+          console.log('🔒 Diálogo de estoque fechado, limpando dados');
         }
       }}>
         <DialogContent className="max-w-4xl">
@@ -609,7 +646,9 @@ export default function PecasPage() {
             </div>
 
             <div className="mt-6">
-              <h3 className="font-semibold mb-2">Peças em Estoque</h3>
+              <h3 className="font-semibold mb-2">
+                Peças em Estoque ({resumoEstoque?.length || 0} peças)
+              </h3>
               <div className="bg-card rounded-lg border max-h-80 overflow-auto">
                 <Table>
                   <TableHeader>
@@ -620,20 +659,21 @@ export default function PecasPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {resumoEstoque.length === 0 ? (
+                    {!resumoEstoque || resumoEstoque.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                          Nenhuma peça em estoque
+                          {resumoEstoque === null ? 'Carregando...' : 'Nenhuma peça cadastrada'}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      resumoEstoque.map((item) => (
-                        <TableRow key={item.id_peca}>
-                          <TableCell>{item.codigo_peca}</TableCell>
-                          <TableCell>{item.descricao_peca}</TableCell>
+                      resumoEstoque.map((item, index) => (
+                        <TableRow key={item.id_peca || index}>
+                          <TableCell>{item.codigo_peca || '-'}</TableCell>
+                          <TableCell>{item.descricao_peca || '-'}</TableCell>
                           <TableCell className="text-right">
-                            <span className={item.quantidade <= 0 ? "text-red-500 font-semibold" : ""}>
-                              {item.quantidade}
+                            <span className={item.quantidade === 0 ? "text-red-500 font-semibold" : 
+                                           item.quantidade <= 5 ? "text-yellow-600 font-semibold" : ""}>
+                              {item.quantidade ?? 0}
                             </span>
                           </TableCell>
                         </TableRow>
@@ -707,18 +747,26 @@ export default function PecasPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data</TableHead>
-                      <TableHead>Quantidade</TableHead>
+                      <TableHead className="text-right">Quantidade</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {movimentacoes.map((mov) => (
-                      <TableRow key={mov.id_estoque}>
-                        <TableCell>
-                          {new Date(mov.data_registro).toLocaleString('pt-BR')}
+                    {!movimentacoes || movimentacoes.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={2} className="text-center py-4 text-muted-foreground">
+                          Nenhuma movimentação registrada
                         </TableCell>
-                        <TableCell>{mov.quantidade}</TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      movimentacoes.map((mov) => (
+                        <TableRow key={mov.id_estoque}>
+                          <TableCell>
+                            {mov.data_registro ? new Date(mov.data_registro).toLocaleString('pt-BR') : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">{mov.quantidade}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>

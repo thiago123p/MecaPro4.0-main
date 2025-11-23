@@ -22,16 +22,46 @@ router.get('/resumo', async (req, res) => {
   try {
     console.log('Buscando resumo de estoque...');
     const result = await pool.query(
-      `SELECT p.id_peca, p.descricao_peca, p.codigo_peca, p.preco_peca, 
-              COALESCE(e.quantidade, 0) as quantidade
+      `SELECT 
+        p.id_peca, 
+        p.descricao_peca, 
+        p.codigo_peca, 
+        p.preco_peca, 
+        COALESCE(e.quantidade, 0) as quantidade,
+        e.data_registro
        FROM pecas p
        LEFT JOIN controle_estoque e ON p.id_peca = e.id_peca
-       ORDER BY p.descricao_peca ASC`
+       ORDER BY e.data_registro DESC NULLS LAST, p.descricao_peca ASC`
     );
     console.log('Resumo de estoque recuperado:', result.rowCount, 'peças');
+    console.log('Dados:', result.rows);
     res.json(result.rows);
   } catch (error) {
     console.error('Erro ao buscar resumo de estoque:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Rota para obter as últimas movimentações (5 mais recentes)
+router.get('/ultimas-movimentacoes', async (req, res) => {
+  try {
+    console.log('Buscando últimas movimentações...');
+    const result = await pool.query(
+      `SELECT 
+        p.id_peca, 
+        p.descricao_peca, 
+        p.codigo_peca, 
+        e.quantidade,
+        e.data_registro
+       FROM controle_estoque e
+       INNER JOIN pecas p ON e.id_peca = p.id_peca
+       ORDER BY e.data_registro DESC
+       LIMIT 5`
+    );
+    console.log('Últimas movimentações recuperadas:', result.rowCount, 'registros');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Erro ao buscar últimas movimentações:', error);
     res.status(500).json({ error: error.message });
   }
 });

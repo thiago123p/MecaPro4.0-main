@@ -21,6 +21,9 @@ export async function apiRequest<T>(
     });
 
     const data = await response.json();
+    
+    console.log(`✅ Resposta recebida de ${API_URL}${endpoint}:`, data);
+    console.log(`📊 Tipo da resposta:`, Array.isArray(data) ? `Array com ${data.length} itens` : typeof data);
 
     if (!response.ok) {
       // Se o servidor retornou um erro com mensagem
