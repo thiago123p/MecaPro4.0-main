@@ -7,7 +7,14 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20.11.0
+      - key: NPM_CONFIG_PREFER_OFFLINE
+        value: false
       - key: NODE_ENV
         value: production
       - key: VITE_API_URL
         value: https://mecapro4-0-main.onrender.com/api
+    buildFilter:
+      paths:
+        - src/**
+        - package.json
+        - vite.config.ts
