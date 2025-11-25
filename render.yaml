@@ -2,15 +2,13 @@ services:
   - type: web
     name: mecapro-frontend
     runtime: static
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     staticPublishPath: ./dist
     envVars:
       - key: NODE_VERSION
         value: 20.11.0
       - key: NPM_CONFIG_PREFER_OFFLINE
         value: false
-      - key: NODE_ENV
-        value: production
       - key: VITE_API_URL
         value: https://mecapro4-0-main.onrender.com/api
     buildFilter:
