@@ -12,23 +12,46 @@ npm install
 
 ### 2. Configurar banco de dados
 - Crie um arquivo `.env` baseado no `.env.example`
-- Configure a `DATABASE_URL` com suas credenciais do PostgreSQL
+- Configure as variáveis de ambiente:
 
 ```env
-DATABASE_URL=postgresql://usuario:senha@localhost:5432/mecapro
+# Ambiente (development ou production)
+NODE_ENV=development
+
+# Banco Local (Desenvolvimento)
+DATABASE_URL=postgresql://postgres:1234@localhost:5432/MecaPro4.0
+
+# Banco Remoto (Produção) - Render.com
+DATABASE_URL_PRODUCTION=postgresql://mecapro:senha@host:porta/mecaprobd
+
+# Porta do servidor
 PORT=3000
 ```
 
 ### 3. Executar localmente
 ```bash
-# Modo desenvolvimento (com auto-reload)
+# Modo desenvolvimento (banco local)
 npm run dev
 
-# Modo produção
-npm start
+# Modo produção (banco remoto)
+npm run start:prod
 ```
 
 O servidor estará rodando em `http://localhost:3000`
+
+## 🌍 Ambientes
+
+### Desenvolvimento (Local)
+- Usa `DATABASE_URL` do arquivo `.env`
+- Banco PostgreSQL local
+- Sem SSL
+- Comando: `npm run dev`
+
+### Produção (Render.com)
+- Usa `DATABASE_URL_PRODUCTION` do arquivo `.env`
+- Banco PostgreSQL remoto no Render
+- SSL habilitado automaticamente
+- Comando: `npm start` ou `npm run start:prod`
 
 ## 📦 Estrutura
 

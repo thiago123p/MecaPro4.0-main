@@ -1,8 +1,17 @@
 // Configuração da URL da API
 // Para desenvolvimento local: http://localhost:3000/api
-// Para produção (Heroku): https://seu-app.herokuapp.com/api
+// Para produção (Render.com): https://mecapro4-0-main.onrender.com/api
 
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+// Detecta automaticamente o ambiente
+const isProduction = import.meta.env.PROD;
+
+export const API_URL = import.meta.env.VITE_API_URL || 
+  (isProduction 
+    ? 'https://mecapro4-0-main.onrender.com/api' 
+    : 'http://localhost:3000/api');
+
+console.log(`🌍 Ambiente: ${isProduction ? 'PRODUÇÃO' : 'DESENVOLVIMENTO'}`);
+console.log(`🔗 API URL: ${API_URL}`);
 
 // Helper para fazer requisições à API
 export async function apiRequest<T>(
