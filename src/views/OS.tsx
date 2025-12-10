@@ -691,6 +691,9 @@ export default function OS() {
       // Preencher formulário com o veículo do orçamento
       setSelectedVeiculo(orcamento.id_veic);
       
+      // Importar observação do orçamento (ou limpar se não existir)
+      setObservacao(orcamento.observacao || "");
+      
       // Adicionar itens (peças e serviços) do orçamento
       const newItems: OSItem[] = [];
       
@@ -735,11 +738,11 @@ export default function OS() {
       <div className="flex-1 overflow-auto p-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-end items-center gap-2 mb-6">
-            <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+            <Button variant="outline" onClick={() => { resetForm(); setShowImportDialog(true); }}>
               <Plus className="w-4 h-4 mr-2" />
               Importar Orçamento
             </Button>
-            <Button onClick={() => setShowAddDialog(true)}>
+            <Button onClick={() => { resetForm(); setShowAddDialog(true); }}>
               <Plus className="w-4 h-4 mr-2" />
               Nova OS
             </Button>
